@@ -24,7 +24,6 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AppSelectionScreen(
-    onBack: () -> Unit,
     vm: AppSelectionViewModel = viewModel()
 ) {
     val state by vm.uiState.collectAsState()
@@ -44,11 +43,7 @@ fun AppSelectionScreen(
                         }
                     }
                 },
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "Back")
-                    }
-                }
+
             )
         }
     ) { padding ->

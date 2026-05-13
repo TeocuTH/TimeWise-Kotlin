@@ -12,16 +12,27 @@ import android.os.Build
 import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
+import com.example.timewise.calendar.CalendarRepository
+import java.time.LocalDate
+import java.time.LocalTime
+import java.time.format.DateTimeFormatter
 
 class AppMonitorService : Service() {
 
     private lateinit var prefs: AppPreferences
+    private lateinit var calendarRepo: CalendarRepository
     private val handler = Handler(Looper.getMainLooper())
 
     private var pauseUntil = 0L
     var lastBlockedPackage: String? = null
         private set
     private var overlayVisible = false
+
+    // Cached calendar blocks, refreshed on ACTION_REFRESH_CALENDAR
+    private var calendarBlockedApps: Set<String> = emptySet()
+
+    private val dateFmt = DateTimeFormatter.ofPattern("yyyy-MM-dd")
+    private val timeFmt = DateTimeFormatter.ofPattern("HH:mm")
 
     private val pollRunnable = object : Runnable {
         override fun run() {
@@ -32,6 +43,9 @@ class AppMonitorService : Service() {
 
     private fun poll() {
         if (System.currentTimeMillis() < pauseUntil) return
+
+        // Refresh calendar blocks every poll (cheap — reads from memory-cached file)
+        refreshCalendarBlocks()
 
         val usm = getSystemService(USAGE_STATS_SERVICE) as UsageStatsManager
         val now = System.currentTimeMillis()
@@ -44,7 +58,10 @@ class AppMonitorService : Service() {
 
         if (foreground == packageName) { overlayVisible = false; return }
 
-        if (prefs.isBlocked(foreground) && !overlayVisible) {
+        // Union of manually blocked apps + currently active calendar blocks
+        val allBlocked = prefs.blockedApps + calendarBlockedApps
+
+        if (allBlocked.contains(foreground) && !overlayVisible) {
             overlayVisible = true
             lastBlockedPackage = foreground
             startActivity(
@@ -53,15 +70,22 @@ class AppMonitorService : Service() {
                     putExtra(BlockingActivity.EXTRA_BLOCKED_PACKAGE, foreground)
                 }
             )
-        } else if (!prefs.isBlocked(foreground)) {
+        } else if (!allBlocked.contains(foreground)) {
             overlayVisible = false
         }
     }
 
+    private fun refreshCalendarBlocks() {
+        val nowDate = LocalDate.now().format(dateFmt)
+        val nowTime = LocalTime.now().format(timeFmt)
+        calendarBlockedApps = calendarRepo.currentlyBlockedApps(nowDate, nowTime)
+    }
+
     override fun onCreate() {
         super.onCreate()
-        prefs = AppPreferences(this)
-        instance = this
+        prefs        = AppPreferences(this)
+        calendarRepo = CalendarRepository(this)
+        instance     = this
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -71,7 +95,14 @@ class AppMonitorService : Service() {
                 pauseUntil = System.currentTimeMillis() + ms
                 overlayVisible = false
             }
-            ACTION_STOP -> { stopSelf(); return START_NOT_STICKY }
+            ACTION_STOP -> {
+                stopSelf()
+                return START_NOT_STICKY
+            }
+            ACTION_REFRESH_CALENDAR -> {
+                refreshCalendarBlocks()
+                return START_NOT_STICKY
+            }
         }
         startForeground(NOTIFICATION_ID, buildNotification())
         handler.removeCallbacks(pollRunnable)
@@ -88,7 +119,7 @@ class AppMonitorService : Service() {
     override fun onBind(intent: Intent?): IBinder? = null
 
     private fun buildNotification(): Notification {
-        val channelId = "focus_monitor"
+        val channelId = "timewise_monitor"
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channel = NotificationChannel(
                 channelId, "Focus Monitor", NotificationManager.IMPORTANCE_LOW
@@ -113,9 +144,10 @@ class AppMonitorService : Service() {
         private const val WINDOW_MS        = 10_000L
         private const val NOTIFICATION_ID  = 1
 
-        const val ACTION_PAUSE   = "com.example.timewise.ACTION_PAUSE"
-        const val ACTION_STOP    = "com.example.timewise.ACTION_STOP"
-        const val EXTRA_PAUSE_MS = "pause_ms"
+        const val ACTION_PAUSE            = "com.example.timewise.ACTION_PAUSE"
+        const val ACTION_STOP             = "com.example.timewise.ACTION_STOP"
+        const val ACTION_REFRESH_CALENDAR = "com.example.timewise.ACTION_REFRESH_CALENDAR"
+        const val EXTRA_PAUSE_MS          = "pause_ms"
 
         @Volatile var instance: AppMonitorService? = null
 

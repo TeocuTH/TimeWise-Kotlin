@@ -25,7 +25,6 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 
 @Composable
 fun HomeScreen(
-    onNavigateToApps: () -> Unit,
     vm: HomeViewModel = viewModel()
 ) {
     val state by vm.uiState.collectAsState()
@@ -154,7 +153,7 @@ fun HomeScreen(
 
         Card(
             shape  = RoundedCornerShape(16.dp),
-            modifier = Modifier.clickable { onNavigateToApps() }
+            modifier = Modifier
         ) {
             Row(
                 modifier = Modifier
