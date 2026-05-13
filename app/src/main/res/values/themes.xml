@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+
+    <!-- Main app theme — no action bar since Compose handles its own top bar -->
+    <style name="Theme.Timewise" parent="Theme.MaterialComponents.DayNight.NoActionBar">
+        <item name="colorPrimary">#6C63FF</item>
+        <item name="colorPrimaryVariant">#4A44C6</item>
+        <item name="colorOnPrimary">#FFFFFF</item>
+        <item name="colorSecondary">#3B82F6</item>
+        <item name="colorOnSecondary">#FFFFFF</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+    </style>
+
+    <!-- Blocking overlay — full screen, dark, no title bar -->
+    <style name="Theme.Timewise.Blocking" parent="Theme.MaterialComponents.NoActionBar">
+        <item name="android:windowBackground">#0F0F14</item>
+        <item name="android:statusBarColor">#0F0F14</item>
+        <item name="android:navigationBarColor">#0F0F14</item>
+        <item name="android:windowIsTranslucent">false</item>
+        <item name="android:windowFullscreen">false</item>
+    </style>
+
+</resources>

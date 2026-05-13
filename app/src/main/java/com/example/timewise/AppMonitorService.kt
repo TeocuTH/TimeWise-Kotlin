@@ -1,0 +1,131 @@
+package com.example.timewise
+
+import android.app.Notification
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.app.PendingIntent
+import android.app.Service
+import android.app.usage.UsageStatsManager
+import android.content.Context
+import android.content.Intent
+import android.os.Build
+import android.os.Handler
+import android.os.IBinder
+import android.os.Looper
+
+class AppMonitorService : Service() {
+
+    private lateinit var prefs: AppPreferences
+    private val handler = Handler(Looper.getMainLooper())
+
+    private var pauseUntil = 0L
+    var lastBlockedPackage: String? = null
+        private set
+    private var overlayVisible = false
+
+    private val pollRunnable = object : Runnable {
+        override fun run() {
+            poll()
+            handler.postDelayed(this, POLL_INTERVAL_MS)
+        }
+    }
+
+    private fun poll() {
+        if (System.currentTimeMillis() < pauseUntil) return
+
+        val usm = getSystemService(USAGE_STATS_SERVICE) as UsageStatsManager
+        val now = System.currentTimeMillis()
+
+        val foreground = usm
+            .queryUsageStats(UsageStatsManager.INTERVAL_DAILY, now - WINDOW_MS, now)
+            ?.filter { it.lastTimeUsed > 0 }
+            ?.maxByOrNull { it.lastTimeUsed }
+            ?.packageName ?: return
+
+        if (foreground == packageName) { overlayVisible = false; return }
+
+        if (prefs.isBlocked(foreground) && !overlayVisible) {
+            overlayVisible = true
+            lastBlockedPackage = foreground
+            startActivity(
+                Intent(this, BlockingActivity::class.java).apply {
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+                    putExtra(BlockingActivity.EXTRA_BLOCKED_PACKAGE, foreground)
+                }
+            )
+        } else if (!prefs.isBlocked(foreground)) {
+            overlayVisible = false
+        }
+    }
+
+    override fun onCreate() {
+        super.onCreate()
+        prefs = AppPreferences(this)
+        instance = this
+    }
+
+    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        when (intent?.action) {
+            ACTION_PAUSE -> {
+                val ms = intent.getLongExtra(EXTRA_PAUSE_MS, prefs.gracePeriodMillis)
+                pauseUntil = System.currentTimeMillis() + ms
+                overlayVisible = false
+            }
+            ACTION_STOP -> { stopSelf(); return START_NOT_STICKY }
+        }
+        startForeground(NOTIFICATION_ID, buildNotification())
+        handler.removeCallbacks(pollRunnable)
+        handler.post(pollRunnable)
+        return START_STICKY
+    }
+
+    override fun onDestroy() {
+        handler.removeCallbacks(pollRunnable)
+        instance = null
+        super.onDestroy()
+    }
+
+    override fun onBind(intent: Intent?): IBinder? = null
+
+    private fun buildNotification(): Notification {
+        val channelId = "focus_monitor"
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val channel = NotificationChannel(
+                channelId, "Focus Monitor", NotificationManager.IMPORTANCE_LOW
+            ).apply { setShowBadge(false) }
+            getSystemService(NotificationManager::class.java).createNotificationChannel(channel)
+        }
+        val openPi = PendingIntent.getActivity(
+            this, 0, Intent(this, MainActivity::class.java),
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+        )
+        return Notification.Builder(this, channelId)
+            .setContentTitle("Timewise is active")
+            .setContentText("Tap to manage blocked apps")
+            .setSmallIcon(android.R.drawable.ic_lock_idle_lock)
+            .setContentIntent(openPi)
+            .setOngoing(true)
+            .build()
+    }
+
+    companion object {
+        private const val POLL_INTERVAL_MS = 1_000L
+        private const val WINDOW_MS        = 10_000L
+        private const val NOTIFICATION_ID  = 1
+
+        const val ACTION_PAUSE   = "com.example.timewise.ACTION_PAUSE"
+        const val ACTION_STOP    = "com.example.timewise.ACTION_STOP"
+        const val EXTRA_PAUSE_MS = "pause_ms"
+
+        @Volatile var instance: AppMonitorService? = null
+
+        fun pause(context: Context, durationMs: Long) {
+            context.startService(
+                Intent(context, AppMonitorService::class.java).apply {
+                    action = ACTION_PAUSE
+                    putExtra(EXTRA_PAUSE_MS, durationMs)
+                }
+            )
+        }
+    }
+}
