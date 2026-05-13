@@ -17,6 +17,16 @@ import java.time.LocalDate
 import java.time.LocalTime
 import java.time.format.DateTimeFormatter
 
+/**
+ * Always-on background service.
+ *
+ * Blocking sources (independent, unioned together):
+ *  1. Active calendar events  — unconditional, no user toggle needed.
+ *  2. Active focus session    — timed manual block from the Apps screen.
+ *
+ * The service is started on boot and kept alive. It stops itself only
+ * when explicitly told to (ACTION_STOP), which is only used in edge cases.
+ */
 class AppMonitorService : Service() {
 
     private lateinit var prefs: AppPreferences
@@ -28,7 +38,6 @@ class AppMonitorService : Service() {
         private set
     private var overlayVisible = false
 
-    // Cached calendar blocks, refreshed on ACTION_REFRESH_CALENDAR
     private var calendarBlockedApps: Set<String> = emptySet()
 
     private val dateFmt = DateTimeFormatter.ofPattern("yyyy-MM-dd")
@@ -44,8 +53,16 @@ class AppMonitorService : Service() {
     private fun poll() {
         if (System.currentTimeMillis() < pauseUntil) return
 
-        // Refresh calendar blocks every poll (cheap — reads from memory-cached file)
+        // 1. Calendar blocks — always active
         refreshCalendarBlocks()
+
+        // 2. Focus session blocks — active only while session timer is running
+        val sessionApps = prefs.activeFocusSession()
+            ?.let { prefs.focusBlockedApps }
+            ?: emptySet()
+
+        val allBlocked = calendarBlockedApps + sessionApps
+        if (allBlocked.isEmpty()) { overlayVisible = false; return }
 
         val usm = getSystemService(USAGE_STATS_SERVICE) as UsageStatsManager
         val now = System.currentTimeMillis()
@@ -57,9 +74,6 @@ class AppMonitorService : Service() {
             ?.packageName ?: return
 
         if (foreground == packageName) { overlayVisible = false; return }
-
-        // Union of manually blocked apps + currently active calendar blocks
-        val allBlocked = prefs.blockedApps + calendarBlockedApps
 
         if (allBlocked.contains(foreground) && !overlayVisible) {
             overlayVisible = true
@@ -99,10 +113,7 @@ class AppMonitorService : Service() {
                 stopSelf()
                 return START_NOT_STICKY
             }
-            ACTION_REFRESH_CALENDAR -> {
-                refreshCalendarBlocks()
-                return START_NOT_STICKY
-            }
+            ACTION_REFRESH_CALENDAR -> refreshCalendarBlocks()
         }
         startForeground(NOTIFICATION_ID, buildNotification())
         handler.removeCallbacks(pollRunnable)

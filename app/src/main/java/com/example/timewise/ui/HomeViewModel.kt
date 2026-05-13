@@ -20,10 +20,11 @@ import kotlinx.coroutines.launch
 data class HomeUiState(
     val hasUsagePermission: Boolean   = false,
     val hasOverlayPermission: Boolean = false,
-    val monitoringEnabled: Boolean    = false,
-    val blockedAppCount: Int          = 0,
+    val focusBlockedAppCount: Int     = 0,
     val totalInterceptions: Int       = 0,
     val totalResisted: Int            = 0,
+    val hasActiveSession: Boolean     = false,
+    val hasActiveCalendarEvent: Boolean = false,
 )
 
 class HomeViewModel(app: Application) : AndroidViewModel(app) {
@@ -33,34 +34,26 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
     private val _uiState = MutableStateFlow(HomeUiState())
     val uiState: StateFlow<HomeUiState> = _uiState.asStateFlow()
 
-    /** Call this from onResume — permissions can change while the app is backgrounded. */
     fun refresh() {
         val ctx = getApplication<Application>()
+        val session = prefs.activeFocusSession()
         _uiState.update {
             HomeUiState(
-                hasUsagePermission   = hasUsagePermission(ctx),
-                hasOverlayPermission = Settings.canDrawOverlays(ctx),
-                monitoringEnabled    = prefs.monitoringEnabled,
-                blockedAppCount      = prefs.blockedApps.size,
-                totalInterceptions   = prefs.totalInterceptions,
-                totalResisted        = prefs.totalResisted,
+                hasUsagePermission      = hasUsagePermission(ctx),
+                hasOverlayPermission    = Settings.canDrawOverlays(ctx),
+                focusBlockedAppCount    = prefs.focusBlockedApps.size,
+                totalInterceptions      = prefs.totalInterceptions,
+                totalResisted           = prefs.totalResisted,
+                hasActiveSession        = session != null,
+                hasActiveCalendarEvent  = false, // updated by CalendarRepository if needed
             )
         }
-    }
-
-    fun setMonitoring(enabled: Boolean) {
-        val ctx = getApplication<Application>()
-        prefs.monitoringEnabled = enabled
-        if (enabled) {
+        // Always ensure the service is running — it's needed for calendar events
+        if (hasUsagePermission(ctx) && Settings.canDrawOverlays(ctx)) {
             ContextCompat.startForegroundService(
                 ctx, Intent(ctx, AppMonitorService::class.java)
             )
-        } else {
-            ctx.startService(Intent(ctx, AppMonitorService::class.java).apply {
-                action = AppMonitorService.ACTION_STOP
-            })
         }
-        _uiState.update { it.copy(monitoringEnabled = enabled) }
     }
 
     private fun hasUsagePermission(ctx: Context): Boolean {

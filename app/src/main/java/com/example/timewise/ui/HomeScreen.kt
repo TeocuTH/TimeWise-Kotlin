@@ -14,6 +14,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -23,19 +24,19 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.repeatOnLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 
+private val Purple      = Color(0xFF6C63FF)
+private val PurpleLight = Color(0xFFEDECFF)
+private val TealColor   = Color(0xFF1D9E75)
+private val TealLight   = Color(0xFFE1F5EE)
+
 @Composable
-fun HomeScreen(
-    vm: HomeViewModel = viewModel()
-) {
-    val state by vm.uiState.collectAsState()
+fun HomeScreen(vm: HomeViewModel = viewModel()) {
+    val state   by vm.uiState.collectAsState()
     val context = LocalContext.current
 
-    // Refresh whenever the screen is resumed (e.g. returning from Settings)
     val lifecycle = LocalLifecycleOwner.current.lifecycle
     LaunchedEffect(lifecycle) {
-        lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
-            vm.refresh()
-        }
+        lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) { vm.refresh() }
     }
 
     val allPermissionsGranted = state.hasUsagePermission && state.hasOverlayPermission
@@ -46,178 +47,123 @@ fun HomeScreen(
             .verticalScroll(rememberScrollState())
             .padding(horizontal = 20.dp)
             .padding(top = 56.dp, bottom = 32.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp)
+        verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        // ── Header ─────────────────────────────────────────────────────────
-        Text(
-            text = "Timewise",
-            style = MaterialTheme.typography.headlineLarge,
-            fontWeight = FontWeight.Bold,
-        )
-        Text(
-            text = "Intentional phone use, one pause at a time.",
+        // ── Header ────────────────────────────────────────────────────────
+        Text("Timewise", style = MaterialTheme.typography.headlineLarge,
+            fontWeight = FontWeight.Bold)
+        Text("Intentional phone use, one pause at a time.",
             style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
+            color = MaterialTheme.colorScheme.onSurfaceVariant)
 
         Spacer(Modifier.height(16.dp))
 
-        // ── Permissions ────────────────────────────────────────────────────
+        // ── Active status banner ──────────────────────────────────────────
+        if (allPermissionsGranted) {
+            val (bannerColor, bannerText, bannerIcon) = when {
+                state.hasActiveSession -> Triple(
+                    PurpleLight,
+                    "Focus session active — apps are blocked",
+                    Icons.Outlined.Timer,
+                )
+                state.hasActiveCalendarEvent -> Triple(
+                    PurpleLight,
+                    "Calendar event active — apps are blocked",
+                    Icons.Outlined.Event,
+                )
+                else -> Triple(
+                    MaterialTheme.colorScheme.surfaceVariant,
+                    "No active block — calendar events will block automatically",
+                    Icons.Outlined.CheckCircle,
+                )
+            }
+            Card(
+                shape  = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(containerColor = bannerColor),
+            ) {
+                Row(
+                    modifier          = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    Icon(bannerIcon, null, tint = Purple, modifier = Modifier.size(20.dp))
+                    Text(bannerText, style = MaterialTheme.typography.bodySmall,
+                        color = Color(0xFF3C3489))
+                }
+            }
+
+            Spacer(Modifier.height(4.dp))
+        }
+
+        // ── Permissions ───────────────────────────────────────────────────
         SectionLabel("Permissions")
 
         PermissionRow(
-            icon    = Icons.Outlined.QueryStats,
-            label   = "Usage access",
+            icon     = Icons.Outlined.QueryStats,
+            label    = "Usage access",
             subtitle = "Detect which app is in the foreground",
-            granted = state.hasUsagePermission,
-            onClick = { context.startActivity(Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS)) }
+            granted  = state.hasUsagePermission,
+            onClick  = { context.startActivity(Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS)) },
         )
         PermissionRow(
-            icon    = Icons.Outlined.Layers,
-            label   = "Draw over other apps",
+            icon     = Icons.Outlined.Layers,
+            label    = "Draw over other apps",
             subtitle = "Show the blocking screen",
-            granted = state.hasOverlayPermission,
-            onClick = {
+            granted  = state.hasOverlayPermission,
+            onClick  = {
                 context.startActivity(
-                    Intent(
-                        Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
-                        Uri.parse("package:${context.packageName}")
-                    )
+                    Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                        Uri.parse("package:${context.packageName}"))
                 )
-            }
+            },
         )
 
         Spacer(Modifier.height(8.dp))
 
-        // ── Monitoring toggle ───────────────────────────────────────────────
-        SectionLabel("Focus mode")
+        // ── How blocking works ────────────────────────────────────────────
+        SectionLabel("How it works")
 
         Card(
             shape  = RoundedCornerShape(16.dp),
-            colors = CardDefaults.cardColors(
-                containerColor = if (state.monitoringEnabled)
-                    MaterialTheme.colorScheme.primaryContainer
-                else
-                    MaterialTheme.colorScheme.surfaceVariant
-            )
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+            border = androidx.compose.foundation.BorderStroke(
+                0.5.dp, MaterialTheme.colorScheme.outlineVariant),
         ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 20.dp, vertical = 16.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Icon(
-                    imageVector = if (state.monitoringEnabled)
-                        Icons.Outlined.Shield else Icons.Outlined.ShieldMoon,
-                    contentDescription = null,
-                    tint = if (state.monitoringEnabled)
-                        MaterialTheme.colorScheme.primary
-                    else
-                        MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.size(28.dp)
+            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                HowItWorksRow(
+                    icon    = Icons.Outlined.CalendarMonth,
+                    title   = "Calendar events",
+                    body    = "Any apps you attach to a calendar event are blocked automatically while that event is running.",
+                    tint    = Purple,
                 )
-                Spacer(Modifier.width(16.dp))
-                Column(Modifier.weight(1f)) {
-                    Text(
-                        text = "Monitoring",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.SemiBold,
-                    )
-                    Text(
-                        text = when {
-                            !allPermissionsGranted  -> "Grant permissions above first"
-                            state.monitoringEnabled -> "Active — watching for blocked apps"
-                            else                    -> "Inactive — apps can open freely"
-                        },
-                        style = MaterialTheme.typography.bodySmall,
-                        color = when {
-                            !allPermissionsGranted  -> MaterialTheme.colorScheme.error
-                            state.monitoringEnabled -> MaterialTheme.colorScheme.primary
-                            else                    -> MaterialTheme.colorScheme.onSurfaceVariant
-                        }
-                    )
-                }
-                Switch(
-                    checked  = state.monitoringEnabled,
-                    onCheckedChange = { if (allPermissionsGranted) vm.setMonitoring(it) },
-                    enabled  = allPermissionsGranted
+                HorizontalDivider()
+                HowItWorksRow(
+                    icon    = Icons.Outlined.Timer,
+                    title   = "Focus sessions",
+                    body    = "Start a timed session from the Apps tab to block your chosen apps for a set duration.",
+                    tint    = TealColor,
                 )
             }
         }
 
         Spacer(Modifier.height(8.dp))
 
-        // ── Blocked apps card ───────────────────────────────────────────────
-        SectionLabel("Blocked apps")
-
-        Card(
-            shape  = RoundedCornerShape(16.dp),
-            modifier = Modifier
-        ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 20.dp, vertical = 16.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Icon(
-                    imageVector = Icons.Outlined.Block,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(28.dp)
-                )
-                Spacer(Modifier.width(16.dp))
-                Column(Modifier.weight(1f)) {
-                    Text(
-                        text = "Manage blocked apps",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.SemiBold,
-                    )
-                    Text(
-                        text = when (val n = state.blockedAppCount) {
-                            0    -> "No apps blocked yet — tap to add some"
-                            1    -> "1 app blocked"
-                            else -> "$n apps blocked"
-                        },
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-                Icon(
-                    Icons.Outlined.ChevronRight,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-        }
-
-        Spacer(Modifier.height(8.dp))
-
-        // ── Quick stats ─────────────────────────────────────────────────────
+        // ── Quick stats ───────────────────────────────────────────────────
         SectionLabel("Today")
 
         Card(shape = RoundedCornerShape(16.dp)) {
             Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 20.dp),
-                horizontalArrangement = Arrangement.SpaceEvenly
+                modifier = Modifier.fillMaxWidth().padding(vertical = 20.dp),
+                horizontalArrangement = Arrangement.SpaceEvenly,
             ) {
-                StatCell(
-                    value = state.totalInterceptions.toString(),
-                    label = "Interceptions"
-                )
+                StatCell(state.totalInterceptions.toString(), "Interceptions")
                 HorizontalDivider(
-                    modifier = Modifier
-                        .height(48.dp)
-                        .width(1.dp)
+                    modifier = Modifier.height(48.dp).width(1.dp)
                         .align(Alignment.CenterVertically)
                 )
-                StatCell(
-                    value = state.totalResisted.toString(),
-                    label = "Times resisted"
-                )
+                StatCell(state.totalResisted.toString(), "Times resisted")
             }
         }
     }
@@ -228,10 +174,10 @@ fun HomeScreen(
 @Composable
 private fun SectionLabel(text: String) {
     Text(
-        text  = text.uppercase(),
-        style = MaterialTheme.typography.labelSmall,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-        modifier = Modifier.padding(start = 4.dp, top = 12.dp, bottom = 2.dp)
+        text     = text.uppercase(),
+        style    = MaterialTheme.typography.labelSmall,
+        color    = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.padding(start = 4.dp, top = 12.dp, bottom = 2.dp),
     )
 }
 
@@ -241,44 +187,51 @@ private fun PermissionRow(
     label: String,
     subtitle: String,
     granted: Boolean,
-    onClick: () -> Unit
+    onClick: () -> Unit,
 ) {
     Card(
         shape    = RoundedCornerShape(16.dp),
-        modifier = Modifier.clickable(onClick = onClick)
+        modifier = Modifier.clickable(onClick = onClick),
     ) {
         Row(
-            modifier = Modifier
-                .fillMaxWidth()
+            modifier          = Modifier.fillMaxWidth()
                 .padding(horizontal = 20.dp, vertical = 14.dp),
-            verticalAlignment = Alignment.CenterVertically
+            verticalAlignment = Alignment.CenterVertically,
         ) {
-            Icon(
-                imageVector = icon,
-                contentDescription = null,
-                modifier = Modifier.size(24.dp),
-                tint = MaterialTheme.colorScheme.onSurfaceVariant
-            )
+            Icon(icon, null, modifier = Modifier.size(24.dp),
+                tint = MaterialTheme.colorScheme.onSurfaceVariant)
             Spacer(Modifier.width(16.dp))
             Column(Modifier.weight(1f)) {
-                Text(
-                    text  = label,
-                    style = MaterialTheme.typography.bodyLarge,
+                Text(label, style = MaterialTheme.typography.bodyLarge,
                     color = if (granted) MaterialTheme.colorScheme.onSurface
-                            else         MaterialTheme.colorScheme.error
-                )
-                Text(
-                    text  = subtitle,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+                            else MaterialTheme.colorScheme.error)
+                Text(subtitle, style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             Icon(
-                imageVector = if (granted) Icons.Outlined.CheckCircle else Icons.Outlined.RadioButtonUnchecked,
+                imageVector        = if (granted) Icons.Outlined.CheckCircle
+                                     else Icons.Outlined.RadioButtonUnchecked,
                 contentDescription = if (granted) "Granted" else "Not granted",
-                tint = if (granted) MaterialTheme.colorScheme.primary
-                       else         MaterialTheme.colorScheme.error
+                tint               = if (granted) MaterialTheme.colorScheme.primary
+                                     else MaterialTheme.colorScheme.error,
             )
+        }
+    }
+}
+
+@Composable
+private fun HowItWorksRow(
+    icon: ImageVector,
+    title: String,
+    body: String,
+    tint: Color,
+) {
+    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        Icon(icon, null, tint = tint, modifier = Modifier.size(20.dp).padding(top = 2.dp))
+        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Text(title, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+            Text(body, style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }
@@ -286,16 +239,9 @@ private fun PermissionRow(
 @Composable
 private fun StatCell(value: String, label: String) {
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        Text(
-            text  = value,
-            style = MaterialTheme.typography.headlineMedium,
-            fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.primary
-        )
-        Text(
-            text  = label,
-            style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
+        Text(value, style = MaterialTheme.typography.headlineMedium,
+            fontWeight = FontWeight.Bold, color = Purple)
+        Text(label, style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }

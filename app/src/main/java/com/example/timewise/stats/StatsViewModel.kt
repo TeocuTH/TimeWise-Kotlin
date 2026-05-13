@@ -1,0 +1,119 @@
+package com.example.timewise.stats
+
+import android.app.Application
+import androidx.lifecycle.AndroidViewModel
+import androidx.lifecycle.viewModelScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import java.time.LocalDate
+import java.time.format.DateTimeFormatter
+
+data class DayBar(
+    val date: LocalDate,
+    val label: String,       // "Mon", "Tue" …
+    val hours: Float?,       // null = future / no data
+    val isToday: Boolean,
+)
+
+data class StatsUiState(
+    val loading: Boolean           = true,
+    val weekBars: List<DayBar>     = emptyList(),
+    val weekInterceptions: Int     = 0,
+    val weekResisted: Int          = 0,
+    val currentStreak: Int         = 0,
+    val bestStreak: Int            = 0,
+    val streakWeekDays: List<Boolean> = emptyList(), // Mon–Sun, true = streak day
+    val minutesSaved: Int          = 0,
+    val hardestDay: String         = "",
+    // AI insight — static stand-in for now
+    val aiInsight: String          = "",
+    val aiTip: String              = "",
+)
+
+class StatsViewModel(app: Application) : AndroidViewModel(app) {
+
+    private val repo = StatsRepository(app)
+
+    private val _uiState = MutableStateFlow(StatsUiState())
+    val uiState: StateFlow<StatsUiState> = _uiState.asStateFlow()
+
+    private val dayFmt = DateTimeFormatter.ofPattern("EEE")
+
+    init { load() }
+
+    fun load() {
+        viewModelScope.launch {
+            withContext(Dispatchers.IO) { repo.seedIfNeeded() }
+
+            val today  = LocalDate.now()
+            val bars   = repo.weekScreenTimes(today).map { (date, hours) ->
+                DayBar(
+                    date    = date,
+                    label   = date.format(dayFmt),
+                    hours   = if (date > today) null else hours,
+                    isToday = date == today,
+                )
+            }
+            val weekInter   = repo.weekInterceptions(today)
+            val weekRes     = repo.weekResisted(today)
+            val streak      = repo.currentStreak()
+            val best        = repo.bestStreak()
+            val streakDays  = run {
+                val monday = today.with(java.time.DayOfWeek.MONDAY)
+                (0..6).map { repo.isStreakDay(monday.plusDays(it.toLong())) }
+            }
+            val minSaved    = repo.totalMinutesSaved()
+            val hardest     = repo.hardestDay()
+            val resistPct   = if (weekInter > 0)
+                (weekRes * 100 / weekInter) else 0
+
+            // Static AI stand-in — replace with real API call in Phase 3
+            val insight = buildInsight(resistPct, weekInter, hardest)
+            val tip     = buildTip(hardest, resistPct)
+
+            _uiState.update {
+                StatsUiState(
+                    loading            = false,
+                    weekBars           = bars,
+                    weekInterceptions  = weekInter,
+                    weekResisted       = weekRes,
+                    currentStreak      = streak,
+                    bestStreak         = best,
+                    streakWeekDays     = streakDays,
+                    minutesSaved       = minSaved,
+                    hardestDay         = hardest,
+                    aiInsight          = insight,
+                    aiTip              = tip,
+                )
+            }
+        }
+    }
+
+    // ── Stand-in AI text (template-based, replaced by API later) ─────────────
+
+    private fun buildInsight(resistPct: Int, interceptions: Int, hardestDay: String): String {
+        val trend = when {
+            resistPct >= 70 -> "You're doing really well"
+            resistPct >= 50 -> "You're making progress"
+            else            -> "This week was challenging"
+        }
+        return "$trend — you resisted $resistPct% of the time across " +
+               "$interceptions blocking moments this week. " +
+               "$hardestDay tends to be your hardest day for screen time."
+    }
+
+    private fun buildTip(hardestDay: String, resistPct: Int): String {
+        return if (resistPct < 60) {
+            "Try adding a focus event on $hardestDay evenings in your calendar " +
+            "to automatically block distracting apps during your most vulnerable window."
+        } else {
+            "Keep it up — consider shortening the countdown delay to 3 seconds " +
+            "to make the habit even more automatic."
+        }
+    }
+}

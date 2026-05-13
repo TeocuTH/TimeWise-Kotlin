@@ -19,6 +19,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.example.timewise.calendar.CalendarScreen
+import com.example.timewise.stats.StatsScreen
 import com.example.timewise.ui.AppSelectionScreen
 import com.example.timewise.ui.HomeScreen
 import com.example.timewise.ui.theme.TimewiseTheme
@@ -48,9 +49,10 @@ private sealed class Screen(
     object Home     : Screen("home",     "Home",     Icons.Outlined.Home)
     object Calendar : Screen("calendar", "Calendar", Icons.Outlined.CalendarMonth)
     object Apps     : Screen("apps",     "Apps",     Icons.Outlined.Block)
+    object Stats    : Screen("stats",    "Stats",    Icons.Outlined.BarChart)
 }
 
-private val bottomNavScreens = listOf(Screen.Home, Screen.Calendar, Screen.Apps)
+private val bottomNavScreens = listOf(Screen.Home, Screen.Calendar, Screen.Apps, Screen.Stats)
 
 @Composable
 fun TimewiseApp() {
@@ -88,6 +90,7 @@ fun TimewiseApp() {
             composable(Screen.Home.route)     { HomeScreen() }
             composable(Screen.Calendar.route) { CalendarScreen() }
             composable(Screen.Apps.route)     { AppSelectionScreen() }
+            composable(Screen.Stats.route)    { StatsScreen() }
         }
     }
 }
