@@ -85,6 +85,12 @@ class StatsRepository(private val context: Context) {
 
     // ── Interceptions ─────────────────────────────────────────────────────────
 
+    fun recordInterception(resisted: Boolean, date: LocalDate = LocalDate.now()) {
+        val interceptions = prefs.getInt(interKey(date), 0) + 1
+        val resistedCount = prefs.getInt(resistKey(date), 0) + if (resisted) 1 else 0
+        setDayInterceptions(date, interceptions, resistedCount)
+        if (resisted) markStreakDay(date)
+    }
     private fun setDayInterceptions(date: LocalDate, total: Int, resisted: Int) {
         prefs.edit {
             putInt(interKey(date), total)
