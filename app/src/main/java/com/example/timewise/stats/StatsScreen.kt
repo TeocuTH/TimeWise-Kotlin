@@ -86,7 +86,7 @@ fun StatsScreen(vm: StatsViewModel = viewModel()) {
 
             // ── AI insight ────────────────────────────────────────────────
             AiInsightCard(
-                insight = state.aiInsight,
+                insights = state.aiInsight,
                 tip     = state.aiTip,
             )
 
@@ -523,7 +523,7 @@ private fun StreakCard(current: Int, best: Int, weekDays: List<Boolean>) {
 // ── AI insight card ───────────────────────────────────────────────────────────
 
 @Composable
-private fun AiInsightCard(insight: String, tip: String) {
+private fun AiInsightCard(insights: List<String>, tip: String) {
     Card(
         shape  = RoundedCornerShape(16.dp),
         border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.outlineVariant),
@@ -539,28 +539,20 @@ private fun AiInsightCard(insight: String, tip: String) {
                     fontWeight = FontWeight.SemiBold,
                     color = Purple,
                 )
-                Spacer(Modifier.weight(1f))
-                Surface(
-                    shape  = RoundedCornerShape(4.dp),
-                    color  = PurpleLight,
-                ) {
-                    Text(
-                        "Stand-in",
-                        style    = MaterialTheme.typography.labelSmall,
-                        color    = Color(0xFF534AB7),
-                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
-                    )
-                }
             }
 
             Spacer(Modifier.height(10.dp))
 
-            Text(
-                insight,
-                style      = MaterialTheme.typography.bodyMedium,
-                color      = MaterialTheme.colorScheme.onSurface,
-                lineHeight = 22.sp,
-            )
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                insights.forEach { insight ->
+                    Text(
+                        insight,
+                        style      = MaterialTheme.typography.bodyMedium,
+                        color      = MaterialTheme.colorScheme.onSurface,
+                        lineHeight = 22.sp,
+                    )
+                }
+            }
 
             if (tip.isNotBlank()) {
                 Spacer(Modifier.height(10.dp))
