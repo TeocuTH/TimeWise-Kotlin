@@ -3,6 +3,7 @@ package com.example.timewise
 import android.content.Context
 import android.content.SharedPreferences
 import androidx.core.content.edit
+import com.example.timewise.stats.StatsRepository
 
 /**
  * Centralised persistence layer.
@@ -18,6 +19,8 @@ import androidx.core.content.edit
  */
 class AppPreferences(context: Context) {
 
+    private val appContext = context.applicationContext
+    private val statsRepo  = StatsRepository(appContext)
     private val prefs: SharedPreferences =
         context.getSharedPreferences(PREF_FILE, Context.MODE_PRIVATE)
 
@@ -77,7 +80,10 @@ class AppPreferences(context: Context) {
 
     fun recordInterception(resisted: Boolean) {
         totalInterceptions++
-        if (resisted) totalResisted++
+        if (resisted){
+            totalResisted++
+            statsRepo.recordInterception(resisted)
+        }
     }
 
     companion object {
