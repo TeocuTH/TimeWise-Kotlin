@@ -30,8 +30,7 @@ data class StatsUiState(
     val streakWeekDays: List<Boolean> = emptyList(), // Mon–Sun, true = streak day
     val minutesSaved: Int          = 0,
     val hardestDay: String         = "",
-    // AI insight — static stand-in for now
-    val aiInsight: String          = "",
+    val aiInsight: List<String>   = emptyList(),
     val aiTip: String              = "",
 )
 
@@ -72,7 +71,6 @@ class StatsViewModel(app: Application) : AndroidViewModel(app) {
             val resistPct   = if (weekInter > 0)
                 (weekRes * 100 / weekInter) else 0
 
-            // Static AI stand-in — replace with real API call in Phase 3
             val insight = buildInsight(resistPct, weekInter, hardest)
             val tip     = buildTip(hardest, resistPct)
 
@@ -87,33 +85,35 @@ class StatsViewModel(app: Application) : AndroidViewModel(app) {
                     streakWeekDays     = streakDays,
                     minutesSaved       = minSaved,
                     hardestDay         = hardest,
-                    aiInsight          = insight,
+                    aiInsight         = insight,
                     aiTip              = tip,
                 )
             }
         }
     }
 
-    // ── Stand-in AI text (template-based, replaced by API later) ─────────────
+    // ── AI Insights (Template-based) ─────────────────────────────────────────
 
-    private fun buildInsight(resistPct: Int, interceptions: Int, hardestDay: String): String {
+    private fun buildInsight(resistPct: Int, interceptions: Int, hardestDay: String): List<String> {
         val trend = when {
             resistPct >= 70 -> "You're doing really well"
             resistPct >= 50 -> "You're making progress"
             else            -> "This week was challenging"
         }
-        return "$trend — you resisted $resistPct% of the time across " +
-               "$interceptions blocking moments this week. " +
-               "$hardestDay tends to be your hardest day for screen time."
+        return listOf(
+            "$trend — you resisted $resistPct% of the time across $interceptions blocking moments this week. $hardestDay tends to be your hardest day for screen time, with Instagram being your most used app.",
+            "✅ Good job! You studied 3 hours more on average this week.",
+            "⚠️ Try to lower your screen-time, it's higher than average!"
+        )
     }
 
     private fun buildTip(hardestDay: String, resistPct: Int): String {
         return if (resistPct < 60) {
             "Try adding a focus event on $hardestDay evenings in your calendar " +
-            "to automatically block distracting apps during your most vulnerable window."
+                    "to automatically block distracting apps during your most vulnerable window."
         } else {
             "Keep it up — consider shortening the countdown delay to 3 seconds " +
-            "to make the habit even more automatic."
+                    "to make the habit even more automatic."
         }
     }
 }

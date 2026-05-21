@@ -1,6 +1,7 @@
 package com.example.timewise.stats
 
 import android.content.Context
+import android.content.Intent
 import android.content.SharedPreferences
 import androidx.core.content.edit
 import java.time.DayOfWeek
@@ -37,25 +38,35 @@ class StatsRepository(private val context: Context) {
         if (prefs.getBoolean(KEY_SEEDED, false)) return
 
         val today = LocalDate.now()
+        //val installedApps = getInstalledAppPackages()
         // Seed 30 days of screen-time (hours, as Float stored as Int*10)
         val screenTimeTemplate = listOf(3.1f, 2.4f, 4.0f, 2.8f, 1.9f, 3.5f, 2.2f)
         for (i in 29 downTo 0) {
             val date = today.minusDays(i.toLong())
             val baseHours = screenTimeTemplate[date.dayOfWeek.value % 7]
             val jitter = (-0.4f..0.4f).random()
-            setScreenTime(date, (baseHours + jitter).coerceAtLeast(0.5f))
+            val totalHours = (baseHours + jitter).coerceAtLeast(0.5f)
+            setScreenTime(date, totalHours)
+
+            // Split screen time among apps
+            /*if (installedApps.isNotEmpty()) {
+                seedAppUsageForDay(date, totalHours, installedApps)
+            }*/
         }
 
         // Seed interception / resist history for past 30 days
         for (i in 29 downTo 1) {
             val date = today.minusDays(i.toLong())
-            val interceptions = (2..7).random()
+            val interceptions = (0..7).random()
             val resisted      = (interceptions * 0.55).roundToInt()
                 .coerceAtMost(interceptions)
             setDayInterceptions(date, interceptions, resisted)
 
             // Mark streak days (resisted at least once)
             if (resisted > 0) markStreakDay(date)
+
+            // Seed calendar events (0-3) if there were interceptions/resists
+            //seedEventsForDay(date, (interceptions > 0 || resisted > 0))
         }
 
         // Seed streak-days set
@@ -194,6 +205,8 @@ class StatsRepository(private val context: Context) {
     private fun interKey(date: LocalDate)  = "ic_${date.format(dateFmt)}"
     private fun resistKey(date: LocalDate) = "rs_${date.format(dateFmt)}"
     private fun streakKey(date: LocalDate) = "sk_${date.format(dateFmt)}"
+    //private fun appScreenKey(date: LocalDate, pkg: String) = "screen_time_${date}_$pkg"
+    //private fun mostUsedKey(date: LocalDate) = "most_used_$date"
 
     companion object {
         private const val PREF_FILE      = "timewise_stats"
