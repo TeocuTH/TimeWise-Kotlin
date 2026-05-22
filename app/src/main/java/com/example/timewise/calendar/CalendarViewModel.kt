@@ -23,6 +23,10 @@ data class InstalledApp(
     val icon: Drawable,
 )
 
+enum class CalendarView {
+    DAY, WEEK, MONTH
+}
+
 data class CalendarUiState(
     val selectedDate: LocalDate        = LocalDate.now(),
     val events: List<CalendarEvent>    = emptyList(),
@@ -31,6 +35,7 @@ data class CalendarUiState(
     // Add/edit sheet state
     val showSheet: Boolean             = false,
     val editingEvent: CalendarEvent?   = null,
+    val viewMode: CalendarView         = CalendarView.DAY
 )
 
 class CalendarViewModel(app: Application) : AndroidViewModel(app) {
@@ -56,14 +61,41 @@ class CalendarViewModel(app: Application) : AndroidViewModel(app) {
     fun previousDay() = selectDate(_uiState.value.selectedDate.minusDays(1))
     fun nextDay()     = selectDate(_uiState.value.selectedDate.plusDays(1))
 
+    fun setViewMode(mode: CalendarView) {
+        _uiState.update { it.copy(viewMode = mode) }
+        loadEventsForMode(mode, _uiState.value.selectedDate)
+    }
+
     // ── Events ────────────────────────────────────────────────────────────────
 
     private fun loadEventsForDate(date: LocalDate) {
+        loadEventsForMode(_uiState.value.viewMode, date)
+    }
+
+    private fun loadEventsForMode(mode: CalendarView, date: LocalDate) {
         viewModelScope.launch {
             val events = withContext(Dispatchers.IO) {
-                repo.loadForDate(date.format(dateFmt))
+                when (mode) {
+                    CalendarView.DAY -> repo.loadForDate(date.format(dateFmt))
+                    CalendarView.WEEK -> {
+                        val start = date.minusDays(date.dayOfWeek.value.toLong() - 1)
+                        val end = start.plusDays(6)
+                        repo.loadAll().filter {
+                            val d = LocalDate.parse(it.date, dateFmt)
+                            !d.isBefore(start) && !d.isAfter(end)
+                        }.sortedWith(compareBy({ it.date }, { it.startTime }))
+                    }
+                    CalendarView.MONTH -> {
+                        val start = date.withDayOfMonth(1)
+                        val end = date.withDayOfMonth(date.lengthOfMonth())
+                        repo.loadAll().filter {
+                            val d = LocalDate.parse(it.date, dateFmt)
+                            !d.isBefore(start) && !d.isAfter(end)
+                        }.sortedWith(compareBy({ it.date }, { it.startTime }))
+                    }
+                }
             }
-            _uiState.update { it.copy(events = events, loading = false) }
+            _uiState.update { it.copy(events = events, loading = false, selectedDate = date) }
         }
     }
 
