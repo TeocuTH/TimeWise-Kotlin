@@ -32,6 +32,8 @@ data class StatsUiState(
     val hardestDay: String         = "",
     val aiInsight: List<String>   = emptyList(),
     val aiTip: String              = "",
+    val topApps: List<AppUsageInfo> = emptyList(),
+    val hasUsagePermission: Boolean = false,
 )
 
 class StatsViewModel(app: Application) : AndroidViewModel(app) {
@@ -71,7 +73,12 @@ class StatsViewModel(app: Application) : AndroidViewModel(app) {
             val resistPct   = if (weekInter > 0)
                 (weekRes * 100 / weekInter) else 0
 
-            val insight = buildInsight(resistPct, weekInter, hardest)
+            val topApps     = repo.getScaledTopAppsWeekly()
+            val hasPermission = repo.hasUsageStatsPermission()
+            val topAppName = if (hasPermission && topApps.isNotEmpty()) topApps.first().appName else ""
+            val topAppLine = if (hasPermission && topApps.isNotEmpty()) ", with $topAppName being your most used app." else "."
+
+            val insight = buildInsight(resistPct, weekInter, hardest, topAppLine)
             val tip     = buildTip(hardest, resistPct)
 
             _uiState.update {
@@ -87,6 +94,8 @@ class StatsViewModel(app: Application) : AndroidViewModel(app) {
                     hardestDay         = hardest,
                     aiInsight         = insight,
                     aiTip              = tip,
+                    topApps            = topApps,
+                    hasUsagePermission = hasPermission,
                 )
             }
         }
@@ -94,14 +103,14 @@ class StatsViewModel(app: Application) : AndroidViewModel(app) {
 
     // ── AI Insights (Template-based) ─────────────────────────────────────────
 
-    private fun buildInsight(resistPct: Int, interceptions: Int, hardestDay: String): List<String> {
+    private fun buildInsight(resistPct: Int, interceptions: Int, hardestDay: String, topAppLine: String): List<String> {
         val trend = when {
             resistPct >= 70 -> "You're doing really well"
             resistPct >= 50 -> "You're making progress"
             else            -> "This week was challenging"
         }
         return listOf(
-            "$trend — you resisted $resistPct% of the time across $interceptions blocking moments this week. $hardestDay tends to be your hardest day for screen time, with Instagram being your most used app.",
+            "$trend — you resisted $resistPct% of the time across $interceptions blocking moments this week. $hardestDay tends to be your hardest day for screen time$topAppLine",
             "✅ Good job! You studied 3 hours more on average this week.",
             "⚠️ Try to lower your screen-time, it's higher than average!"
         )

@@ -2,12 +2,29 @@ package com.example.timewise.stats
 
 import android.content.Context
 import android.content.Intent
+import android.app.usage.UsageStatsManager
+import java.util.Calendar
 import android.content.SharedPreferences
 import androidx.core.content.edit
 import java.time.DayOfWeek
 import java.time.LocalDate
+import android.app.AppOpsManager
+import android.content.pm.PackageManager
+import android.graphics.drawable.Drawable
+import android.os.Process
+import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import kotlin.math.roundToInt
+
+/**
+ * Data class representing usage of a single app.
+ */
+data class AppUsageInfo(
+    val packageName: String,
+    val appName: String,
+    val icon: Drawable?,
+    val usageTimeMillis: Long
+)
 
 /**
  * Provides stats data for the stats screen.
@@ -177,6 +194,93 @@ class StatsRepository(private val context: Context) {
     }
 
     // ── Day-of-week worst ─────────────────────────────────────────────────────
+
+    /**
+     * Returns the 5 most used apps in the last 7 days, scaled so their
+     * usageTimeMillis represents their proportion of total REAL weekly
+     * usage, but calculated over the FAKE weekly total.
+     */
+    fun getScaledTopAppsWeekly(limit: Int = 5): List<AppUsageInfo> {
+        if (!hasUsageStatsPermission()) return emptyList()
+
+        val realApps = getTopUsedApps(limit)
+        if (realApps.isEmpty()) return emptyList()
+
+        // 1. Total REAL weekly screen time
+        val usageStatsManager = context.getSystemService(Context.USAGE_STATS_SERVICE) as UsageStatsManager
+        val endTime = System.currentTimeMillis()
+        val startTime = endTime - (7L * 24 * 60 * 60 * 1000)
+        val stats = usageStatsManager.queryUsageStats(UsageStatsManager.INTERVAL_BEST, startTime, endTime)
+        val realTotalMillis = stats?.sumOf { it.totalTimeInForeground } ?: 0L
+
+        if (realTotalMillis == 0L) return realApps
+
+        // 2. FAKE weekly screen time total (sum of last 7 days of simulated data)
+        val today = LocalDate.now()
+        val fakeTotalHours = (0..6).sumOf { i ->
+            getScreenTime(today.minusDays(i.toLong())).coerceAtLeast(0f).toDouble()
+        }
+        val fakeTotalMillis = (fakeTotalHours * 3600000).toLong()
+
+        // 3. Scale based on proportion of realTotalMillis
+        return realApps.map { app ->
+            val proportion = app.usageTimeMillis.toDouble() / realTotalMillis
+            app.copy(usageTimeMillis = (proportion * fakeTotalMillis).toLong())
+        }
+    }
+
+    /**
+     * Returns the 5 most used apps in the last 7 days.
+     */
+    fun getTopUsedApps(limit: Int = 5): List<AppUsageInfo> {
+        if (!hasUsageStatsPermission()) return emptyList()
+
+        val usageStatsManager = context.getSystemService(Context.USAGE_STATS_SERVICE) as UsageStatsManager
+        val pm = context.packageManager
+
+        val endTime = System.currentTimeMillis()
+        val startTime = endTime - (7L * 24 * 60 * 60 * 1000) // Last 7 days
+
+        val stats = usageStatsManager.queryUsageStats(
+            UsageStatsManager.INTERVAL_BEST,
+            startTime,
+            endTime
+        )
+
+        if (stats.isNullOrEmpty()) return emptyList()
+
+        // Group by package name and sum up time
+        val usageMap = stats.groupBy { it.packageName }
+            .mapValues { entry -> entry.value.sumOf { it.totalTimeInForeground } }
+            .filter { it.value > 0 }
+            .toList()
+            .sortedByDescending { it.second }
+            .take(limit)
+
+        return usageMap.map { (pkg, time) ->
+            val appName = try {
+                pm.getApplicationLabel(pm.getApplicationInfo(pkg, 0)).toString()
+            } catch (e: Exception) {
+                pkg
+            }
+            val icon = try {
+                pm.getApplicationIcon(pkg)
+            } catch (e: Exception) {
+                null
+            }
+            AppUsageInfo(pkg, appName, icon, time)
+        }
+    }
+
+    fun hasUsageStatsPermission(): Boolean {
+        val appOps = context.getSystemService(Context.APP_OPS_SERVICE) as AppOpsManager
+        val mode = appOps.noteOpNoThrow(
+            AppOpsManager.OPSTR_GET_USAGE_STATS,
+            Process.myUid(),
+            context.packageName
+        )
+        return mode == AppOpsManager.MODE_ALLOWED
+    }
 
     /** Returns the day name with the highest avg screen time over last 4 weeks. */
     fun hardestDay(): String {

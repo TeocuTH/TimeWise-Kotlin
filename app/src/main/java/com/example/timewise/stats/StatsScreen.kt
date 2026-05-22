@@ -12,17 +12,21 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.painter.BitmapPainter
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.graphics.drawable.toBitmap
 import androidx.lifecycle.viewmodel.compose.viewModel
 import java.time.LocalDate
 import kotlin.math.abs
@@ -77,11 +81,10 @@ fun StatsScreen(vm: StatsViewModel = viewModel()) {
                 resisted      = state.weekResisted,
             )
 
-            // ── Streak ────────────────────────────────────────────────────
-            StreakCard(
-                current     = state.currentStreak,
-                best        = state.bestStreak,
-                weekDays    = state.streakWeekDays,
+            // ── Top Apps Bar Chart ────────────────────────────────────────
+            TopAppsBarChartCard(
+                topApps = state.topApps,
+                hasPermission = state.hasUsagePermission
             )
 
             // ── AI insight ────────────────────────────────────────────────
@@ -102,8 +105,25 @@ private fun MetricRow(state: StatsUiState) {
     val resistPct = if (state.weekInterceptions > 0)
         (state.weekResisted * 100f / state.weekInterceptions).roundToInt() else 0
 
+    val topApp = if (state.hasUsagePermission && state.topApps.isNotEmpty()) {
+        state.topApps.first()
+    } else {
+        null
+    }
+
+    val topAppIcon = topApp?.icon?.let { BitmapPainter(it.toBitmap().asImageBitmap()) }
+
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        MetricCell("Streak",      "${state.currentStreak}",  "days",  Purple,  Modifier.weight(1f))
+        MetricCell(
+            label = "Most Used App",
+            value = if (state.hasUsagePermission && topAppIcon == null) "None" else "",
+            unit = if (state.hasUsagePermission) "" else "",
+            valueColor = Purple,
+            modifier = Modifier.weight(1f),
+            icon = if (!state.hasUsagePermission) Icons.Outlined.Lock else null,
+            appIcon = topAppIcon,
+            unitColor = if (!state.hasUsagePermission) Color.White else MaterialTheme.colorScheme.onSurfaceVariant
+        )
         MetricCell("Blocked",     "${state.weekInterceptions}", "this week", MaterialTheme.colorScheme.onSurface, Modifier.weight(1f))
         MetricCell("Resisted",    "$resistPct%",             "rate",  Teal,    Modifier.weight(1f))
     }
@@ -116,6 +136,9 @@ private fun MetricCell(
     unit: String,
     valueColor: Color,
     modifier: Modifier,
+    icon: androidx.compose.ui.graphics.vector.ImageVector? = null,
+    appIcon: androidx.compose.ui.graphics.painter.Painter? = null,
+    unitColor: Color = MaterialTheme.colorScheme.onSurfaceVariant
 ) {
     Card(
         modifier = modifier,
@@ -123,13 +146,57 @@ private fun MetricCell(
         colors   = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         border   = BorderStroke(0.5.dp, MaterialTheme.colorScheme.outlineVariant),
     ) {
-        Column(Modifier.padding(12.dp)) {
+        Column(Modifier.padding(
+            start  = 12.dp,
+            end    = 12.dp,
+            top    = 12.dp,
+            bottom = if (appIcon != null || icon != null) 5.dp else 12.dp
+        )) {
             Text(label, style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant)
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1)
+
             Spacer(Modifier.height(4.dp))
-            Text(value, fontSize = 22.sp, fontWeight = FontWeight.SemiBold, color = valueColor)
-            Text(unit, style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant)
+            if(appIcon != null){
+                Spacer(Modifier.height(7.dp))
+            } else if (icon != null){
+                Spacer(Modifier.height(7.dp))
+            }
+            Box(modifier = Modifier.height(32.dp), contentAlignment = Alignment.Center) {
+                if (appIcon != null) {
+                    Image(
+                        painter = appIcon,
+                        contentDescription = null,
+                        modifier = Modifier
+                            .size(32.dp)
+                            .clip(RoundedCornerShape(6.dp))
+                    )
+                } else if (icon != null) {
+                    Icon(
+                        icon,
+                        contentDescription = null,
+                        modifier = Modifier
+                            .size(32.dp),
+                        tint = valueColor
+                    )
+                } else if (value.isNotEmpty()) {
+                    Text(
+                        value,
+                        fontSize = if (value.length > 8) 16.sp else 22.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = valueColor,
+                        maxLines = 1,
+                        modifier = Modifier.align(Alignment.CenterStart)
+                    )
+                }
+            }
+            
+            Text(
+                text = unit.ifEmpty { " " }, // Keep space even if empty to maintain height
+                style = MaterialTheme.typography.labelSmall,
+                color = unitColor,
+                maxLines = 1
+            )
         }
     }
 }
@@ -435,87 +502,136 @@ private fun OutcomeStat(label: String, value: Int, color: Color, bg: Color) {
     }
 }
 
-// ── Streak card ───────────────────────────────────────────────────────────────
+// ── Top Apps Bar Chart Card ───────────────────────────────────────────────────
 
 @Composable
-private fun StreakCard(current: Int, best: Int, weekDays: List<Boolean>) {
-    val today    = LocalDate.now()
-    val dayNames = listOf("M","T","W","T","F","S","S")
+private fun TopAppsBarChartCard(topApps: List<AppUsageInfo>, hasPermission: Boolean) {
+    val context = LocalContext.current
 
     Card(
-        shape  = RoundedCornerShape(16.dp),
+        shape = RoundedCornerShape(16.dp),
         border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.outlineVariant),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
     ) {
         Column(Modifier.padding(16.dp)) {
-            Text("Daily streak", fontWeight = FontWeight.SemiBold,
-                style = MaterialTheme.typography.titleSmall)
-            Text("Days with at least one successful resist",
+            Text(
+                "Most used apps",
+                fontWeight = FontWeight.SemiBold,
+                style = MaterialTheme.typography.titleSmall
+            )
+            Text(
+                "Weekly usage distribution",
                 style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant)
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
 
-            Spacer(Modifier.height(12.dp))
+            Spacer(Modifier.height(16.dp))
 
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    "$current",
-                    fontSize   = 40.sp,
-                    fontWeight = FontWeight.Bold,
-                    color      = Purple,
-                )
-                Spacer(Modifier.width(12.dp))
-                Column {
-                    Text("days in a row", style = MaterialTheme.typography.bodyMedium,
-                        fontWeight = FontWeight.Medium)
-                    Text("Best: $best days", style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-            }
-
-            Spacer(Modifier.height(12.dp))
-
-            // Week dot row
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-            ) {
-                weekDays.forEachIndexed { idx, done ->
-                    val isToday = idx == (today.dayOfWeek.value - 1)
-                    val isFuture = idx > (today.dayOfWeek.value - 1)
-                    Box(
-                        modifier = Modifier
-                            .weight(1f)
-                            .aspectRatio(1f)
-                            .padding(horizontal = 3.dp)
-                            .clip(CircleShape)
-                            .background(
-                                when {
-                                    isToday  -> Purple
-                                    done     -> PurpleLight
-                                    isFuture -> MaterialTheme.colorScheme.surfaceVariant
-                                    else     -> MaterialTheme.colorScheme.surfaceVariant
-                                }
-                            )
-                            .then(
-                                if (!done && !isToday && !isFuture)
-                                    Modifier.border(0.5.dp, MaterialTheme.colorScheme.outlineVariant, CircleShape)
-                                else Modifier
-                            ),
-                        contentAlignment = Alignment.Center,
-                    ) {
+            if (!hasPermission) {
+                Box(
+                    Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(PurpleLight)
+                        .clickable {
+                            val intent = android.content.Intent(android.provider.Settings.ACTION_USAGE_ACCESS_SETTINGS)
+                            context.startActivity(intent)
+                        }
+                        .padding(16.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Icon(Icons.Outlined.Lock, null, tint = Purple)
+                        Spacer(Modifier.height(8.dp))
                         Text(
-                            dayNames[idx],
+                            "Permission required to see usage data.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Purple,
+                            textAlign = TextAlign.Center
+                        )
+                        Text(
+                            "Tap to open Settings",
                             style = MaterialTheme.typography.labelSmall,
-                            fontWeight = FontWeight.SemiBold,
-                            color = when {
-                                isToday  -> Color.White
-                                done     -> Color(0xFF3C3489)
-                                else     -> MaterialTheme.colorScheme.onSurfaceVariant
-                            }
+                            fontWeight = FontWeight.Bold,
+                            color = Purple
                         )
                     }
                 }
+            } else if (topApps.isEmpty()) {
+                Text(
+                    "No usage data found yet.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(vertical = 8.dp)
+                )
+            } else {
+                val maxUsage = topApps.maxOfOrNull { it.usageTimeMillis } ?: 1L
+                
+                Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                    topApps.forEach { app ->
+                        AppUsageBarRow(app, maxUsage)
+                    }
+                }
             }
+        }
+    }
+}
+
+@Composable
+private fun AppUsageBarRow(app: AppUsageInfo, maxUsage: Long) {
+    val hours = app.usageTimeMillis / (1000f * 60 * 60)
+    val minutes = (app.usageTimeMillis / (1000f * 60) % 60).toInt()
+    val fraction = (app.usageTimeMillis.toFloat() / maxUsage).coerceIn(0.05f, 1f)
+
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        if (app.icon != null) {
+            Image(
+                painter = BitmapPainter(app.icon.toBitmap().asImageBitmap()),
+                contentDescription = null,
+                modifier = Modifier
+                    .size(28.dp)
+                    .clip(RoundedCornerShape(6.dp))
+            )
+        } else {
+            Box(
+                Modifier
+                    .size(28.dp)
+                    .clip(RoundedCornerShape(6.dp))
+                    .background(MaterialTheme.colorScheme.surfaceVariant)
+            )
+        }
+
+        Column(Modifier.weight(1f)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    app.appName,
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.Medium,
+                    maxLines = 1
+                )
+                Text(
+                    if (hours >= 1f) "%.1fh %dm".format(hours, minutes) else "${minutes}m",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = Purple,
+                    fontWeight = FontWeight.SemiBold
+                )
+            }
+            Spacer(Modifier.height(4.dp))
+            // The Bar
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth(fraction)
+                    .height(8.dp)
+                    .clip(RoundedCornerShape(4.dp))
+                    .background(PurpleMid)
+            )
         }
     }
 }
