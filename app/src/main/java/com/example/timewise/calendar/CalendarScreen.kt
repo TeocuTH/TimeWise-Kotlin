@@ -286,7 +286,6 @@ private fun WeekTimeline(
     val hourHeight = 64.dp
     val totalHeight = hourHeight * 24
     val scrollState = rememberScrollState()
-    val coroutineScope = rememberCoroutineScope()
 
     Column(modifier = Modifier.fillMaxSize()) {
         // Header (Day names)
@@ -312,175 +311,101 @@ private fun WeekTimeline(
                     )
                 }
             }
-            Spacer(modifier = Modifier.width(20.dp)) // Placeholder for scrollbar
         }
 
         HorizontalDivider(thickness = 0.5.dp, color = MaterialTheme.colorScheme.outlineVariant)
 
-        Row(modifier = Modifier.weight(1f)) {
-            // ── Main Timeline Area ──
-            Box(
-                modifier = Modifier
-                    .weight(1f)
-                    .fillMaxHeight()
-                    .verticalScroll(scrollState)
-            ) {
-                // 1. Grid Background (Vertical lines)
-                Row(modifier = Modifier.fillMaxWidth().height(totalHeight)) {
-                    Spacer(modifier = Modifier.width(timeWidth))
-                    for (i in 0..6) {
-                        Spacer(
-                            modifier = Modifier
-                                .weight(1f)
-                                .fillMaxHeight()
-                                .border(0.25.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.2f))
-                        )
-                    }
+        // ── Main Timeline Area ──
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .verticalScroll(scrollState)
+        ) {
+            // 1. Grid Background (Vertical lines)
+            Row(modifier = Modifier.fillMaxWidth().height(totalHeight)) {
+                Spacer(modifier = Modifier.width(timeWidth))
+                for (i in 0..6) {
+                    Spacer(
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxHeight()
+                            .border(0.25.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.2f))
+                    )
                 }
+            }
 
-                // 2. Horizontal lines & Time labels
-                Column(modifier = Modifier.fillMaxWidth().height(totalHeight)) {
-                    for (h in 0..23) {
-                        Row(modifier = Modifier.height(hourHeight).fillMaxWidth()) {
-                            // Time label
-                            Box(modifier = Modifier.width(timeWidth).fillMaxHeight(), contentAlignment = Alignment.TopCenter) {
-                                Text(
-                                    text = "%02d:00".format(h),
-                                    style = MaterialTheme.typography.labelSmall,
-                                    fontSize = 10.sp,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    modifier = Modifier.padding(top = 2.dp)
-                                )
-                            }
-                            // Divider
-                            Box(modifier = Modifier.weight(1f).fillMaxHeight()) {
-                                HorizontalDivider(
-                                    modifier = Modifier.align(Alignment.TopStart),
-                                    thickness = 0.5.dp,
-                                    color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.2f)
-                                )
-                            }
+            // 2. Horizontal lines & Time labels
+            Column(modifier = Modifier.fillMaxWidth().height(totalHeight)) {
+                for (h in 0..23) {
+                    Row(modifier = Modifier.height(hourHeight).fillMaxWidth()) {
+                        // Time label
+                        Box(modifier = Modifier.width(timeWidth).fillMaxHeight(), contentAlignment = Alignment.TopCenter) {
+                            Text(
+                                text = "%02d:00".format(h),
+                                style = MaterialTheme.typography.labelSmall,
+                                fontSize = 10.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(top = 2.dp)
+                            )
                         }
-                    }
-                }
-
-                // 3. Events Layer
-                Row(modifier = Modifier.fillMaxWidth().height(totalHeight)) {
-                    Spacer(modifier = Modifier.width(timeWidth))
-                    for (i in 0..6) {
-                        val date = startOfWeek.plusDays(i.toLong())
-                        val dateStr = date.format(DateTimeFormatter.ofPattern("yyyy-MM-dd"))
-                        val dayEvents = events.filter { it.date == dateStr }
-
+                        // Divider
                         Box(modifier = Modifier.weight(1f).fillMaxHeight()) {
-                            dayEvents.forEach { event ->
-                                val start = runCatching { LocalTime.parse(event.startTime) }.getOrNull()
-                                val end = runCatching { LocalTime.parse(event.endTime) }.getOrNull()
-                                
-                                if (start != null && end != null) {
-                                    val startMinutes = start.hour * 60 + start.minute
-                                    val endMinutes = end.hour * 60 + end.minute
-                                    val duration = (endMinutes - startMinutes).coerceAtLeast(20)
-
-                                    val topOffset = (startMinutes * hourHeight.value / 60).dp
-                                    val boxHeight = (duration * hourHeight.value / 60).dp
-
-                                    Box(
-                                        modifier = Modifier
-                                            .padding(horizontal = 2.dp)
-                                            .offset(y = topOffset)
-                                            .height(boxHeight)
-                                            .fillMaxWidth()
-                                            .clip(RoundedCornerShape(4.dp))
-                                            .background(event.color.accentColor())
-                                            .border(1.dp, Color.White.copy(alpha = 0.5f), RoundedCornerShape(4.dp))
-                                            .clickable { onTap(event) }
-                                            .padding(2.dp)
-                                    ) {
-                                        if (boxHeight > 16.dp) {
-                                            Text(
-                                                text = event.title,
-                                                style = MaterialTheme.typography.labelSmall,
-                                                fontSize = 9.sp,
-                                                color = Color.White,
-                                                fontWeight = FontWeight.Bold,
-                                                maxLines = 2,
-                                                overflow = TextOverflow.Ellipsis
-                                            )
-                                        }
-                                    }
-                                }
-                            }
+                            HorizontalDivider(
+                                modifier = Modifier.align(Alignment.TopStart),
+                                thickness = 0.5.dp,
+                                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.2f)
+                            )
                         }
                     }
                 }
             }
 
-            // ── Interactive Scrollbar (Slide bar) ──
-            BoxWithConstraints(
-                modifier = Modifier
-                    .width(20.dp)
-                    .fillMaxHeight()
-                    .background(Color(0xFFF0F0F0))
-                    .border(0.5.dp, Color.LightGray)
-            ) {
-                val viewportHeight = this.maxHeight
-                val density = LocalDensity.current
-                val totalHeightPx = with(density) { totalHeight.toPx() }
-                val viewportHeightPx = with(density) { viewportHeight.toPx() }
-                val maxScroll = (totalHeightPx - viewportHeightPx).coerceAtLeast(0f)
+            // 3. Events Layer
+            Row(modifier = Modifier.fillMaxWidth().height(totalHeight)) {
+                Spacer(modifier = Modifier.width(timeWidth))
+                for (i in 0..6) {
+                    val date = startOfWeek.plusDays(i.toLong())
+                    val dateStr = date.format(DateTimeFormatter.ofPattern("yyyy-MM-dd"))
+                    val dayEvents = events.filter { it.date == dateStr }
 
-                if (maxScroll > 0) {
-                    val scrollFraction = (scrollState.value.toFloat() / maxScroll).coerceIn(0f, 1f)
-                    val thumbHeight = viewportHeight * (viewportHeight / totalHeight)
-                    val trackHeight = viewportHeight - 40.dp
-                    val thumbOffset = (trackHeight - thumbHeight) * scrollFraction
+                    Box(modifier = Modifier.weight(1f).fillMaxHeight()) {
+                        dayEvents.forEach { event ->
+                            val start = runCatching { LocalTime.parse(event.startTime) }.getOrNull()
+                            val end = runCatching { LocalTime.parse(event.endTime) }.getOrNull()
+                            
+                            if (start != null && end != null) {
+                                val startMinutes = start.hour * 60 + start.minute
+                                val endMinutes = end.hour * 60 + end.minute
+                                val duration = (endMinutes - startMinutes).coerceAtLeast(20)
 
-                    Column(
-                        modifier = Modifier.fillMaxSize(),
-                        horizontalAlignment = Alignment.CenterHorizontally
-                    ) {
-                        // Up arrow
-                        IconButton(
-                            onClick = { coroutineScope.launch { scrollState.scrollBy(-viewportHeightPx / 4) } },
-                            modifier = Modifier.size(20.dp)
-                        ) {
-                            Icon(Icons.Outlined.KeyboardArrowUp, null, tint = Color.Gray)
-                        }
+                                val topOffset = (startMinutes * hourHeight.value / 60).dp
+                                val boxHeight = (duration * hourHeight.value / 60).dp
 
-                        // Scroll track
-                        Box(
-                            modifier = Modifier
-                                .weight(1f)
-                                .fillMaxWidth()
-                                .pointerInput(maxScroll) {
-                                    detectDragGestures { change, dragAmount ->
-                                        change.consume()
-                                        val scrollDelta = (dragAmount.y / with(density) { trackHeight.toPx() }) * maxScroll
-                                        coroutineScope.launch {
-                                            scrollState.scrollBy(scrollDelta)
-                                        }
+                                Box(
+                                    modifier = Modifier
+                                        .padding(horizontal = 2.dp)
+                                        .offset(y = topOffset)
+                                        .height(boxHeight)
+                                        .fillMaxWidth()
+                                        .clip(RoundedCornerShape(4.dp))
+                                        .background(event.color.accentColor())
+                                        .border(1.dp, Color.White.copy(alpha = 0.5f), RoundedCornerShape(4.dp))
+                                        .clickable { onTap(event) }
+                                        .padding(2.dp)
+                                ) {
+                                    if (boxHeight > 16.dp) {
+                                        Text(
+                                            text = event.title,
+                                            style = MaterialTheme.typography.labelSmall,
+                                            fontSize = 9.sp,
+                                            color = Color.White,
+                                            fontWeight = FontWeight.Bold,
+                                            maxLines = 2,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
                                     }
                                 }
-                        ) {
-                            // Thumb
-                            Box(
-                                modifier = Modifier
-                                    .offset(y = thumbOffset)
-                                    .fillMaxWidth(0.6f)
-                                    .height(thumbHeight.coerceAtLeast(30.dp))
-                                    .align(Alignment.TopCenter)
-                                    .clip(RoundedCornerShape(4.dp))
-                                    .background(Color.DarkGray.copy(alpha = 0.5f))
-                            )
-                        }
-
-                        // Down arrow
-                        IconButton(
-                            onClick = { coroutineScope.launch { scrollState.scrollBy(viewportHeightPx / 4) } },
-                            modifier = Modifier.size(20.dp)
-                        ) {
-                            Icon(Icons.Outlined.KeyboardArrowDown, null, tint = Color.Gray)
+                            }
                         }
                     }
                 }
