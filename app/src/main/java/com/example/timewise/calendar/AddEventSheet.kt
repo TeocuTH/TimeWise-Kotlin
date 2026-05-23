@@ -44,6 +44,7 @@ private fun EventColor.color() = when (this) {
 fun AddEventSheet(
     initial: CalendarEvent,
     installedApps: List<InstalledApp>,
+    suggestedApps: List<InstalledApp>,
     isEditing: Boolean,
     onSave: (CalendarEvent) -> Unit,
     onDelete: (String) -> Unit,
@@ -230,6 +231,33 @@ fun AddEventSheet(
                             modifier            = Modifier.heightIn(max = 260.dp),
                             verticalArrangement = Arrangement.spacedBy(2.dp),
                         ) {
+                            if (appSearch.isEmpty() && suggestedApps.isNotEmpty()) {
+                                item {
+                                    Box(Modifier.padding(top = 4.dp, bottom = 4.dp)) {
+                                        SectionLabel("Suggested")
+                                    }
+                                }
+                                items(suggestedApps, key = { "sug_${it.packageName}" }) { app ->
+                                    AppPickerRow(
+                                        app      = app,
+                                        checked  = blocked.contains(app.packageName),
+                                        onToggle = {
+                                            blocked = if (blocked.contains(app.packageName))
+                                                blocked - app.packageName
+                                            else
+                                                blocked + app.packageName
+                                        },
+                                    )
+                                }
+                                item {
+                                    HorizontalDivider(
+                                        modifier  = Modifier.padding(vertical = 8.dp, horizontal = 4.dp),
+                                        thickness = 0.5.dp,
+                                        color     = MaterialTheme.colorScheme.outlineVariant
+                                    )
+                                }
+                            }
+
                             items(filtered, key = { it.packageName }) { app ->
                                 AppPickerRow(
                                     app       = app,

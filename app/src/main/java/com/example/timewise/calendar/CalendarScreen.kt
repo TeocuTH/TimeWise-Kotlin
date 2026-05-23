@@ -52,6 +52,7 @@ fun CalendarScreen(vm: CalendarViewModel = viewModel()) {
         AddEventSheet(
             initial      = state.editingEvent ?: vm.newEventForDate(state.selectedDate),
             installedApps = state.installedApps,
+            suggestedApps = state.suggestedApps,
             isEditing    = state.editingEvent != null,
             onSave       = vm::saveEvent,
             onDelete     = { vm.deleteEvent(it) },

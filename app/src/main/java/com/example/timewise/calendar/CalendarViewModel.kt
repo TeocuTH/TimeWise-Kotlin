@@ -6,6 +6,7 @@ import android.graphics.drawable.Drawable
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.timewise.AppMonitorService
+import com.example.timewise.stats.StatsRepository
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -27,6 +28,7 @@ data class CalendarUiState(
     val selectedDate: LocalDate        = LocalDate.now(),
     val events: List<CalendarEvent>    = emptyList(),
     val installedApps: List<InstalledApp> = emptyList(),
+    val suggestedApps: List<InstalledApp> = emptyList(),
     val loading: Boolean               = true,
     // Add/edit sheet state
     val showSheet: Boolean             = false,
@@ -36,6 +38,7 @@ data class CalendarUiState(
 class CalendarViewModel(app: Application) : AndroidViewModel(app) {
 
     private val repo = CalendarRepository(app)
+    private val statsRepo = StatsRepository(app)
     private val dateFmt = DateTimeFormatter.ofPattern("yyyy-MM-dd")
 
     private val _uiState = MutableStateFlow(CalendarUiState())
@@ -111,7 +114,39 @@ class CalendarViewModel(app: Application) : AndroidViewModel(app) {
     private fun loadInstalledApps() {
         viewModelScope.launch {
             val apps = withContext(Dispatchers.IO) { fetchInstalledApps() }
-            _uiState.update { it.copy(installedApps = apps) }
+            val suggested = getSuggestedApps(apps)
+            _uiState.update { it.copy(installedApps = apps, suggestedApps = suggested) }
+        }
+    }
+
+    private fun getSuggestedApps(allApps: List<InstalledApp>): List<InstalledApp> {
+        val mostUsed = statsRepo.getTopUsedApps(10)
+        val pkgMap = allApps.associateBy { it.packageName }
+
+        val suggestedFromStats = mostUsed
+            .mapNotNull { pkgMap[it.packageName] }
+            .filter { app ->
+                // Filter out Google apps except Chrome and YouTube
+                val isGoogleApp = app.packageName.startsWith("com.google.") || 
+                                app.packageName.startsWith("com.android.vending")
+                val isAllowedGoogleApp = app.packageName == "com.android.chrome" || 
+                                       app.packageName == "com.google.android.youtube"
+                
+                !isGoogleApp || isAllowedGoogleApp
+            }
+            .take(3)
+
+        return if (suggestedFromStats.isNotEmpty()) {
+            suggestedFromStats
+        } else {
+            // Fixed list of common distractions for demo if no stats/permission
+            val fallbackPkgs = listOf(
+                "com.instagram.android",
+                "com.zhiliaoapp.musically", // TikTok
+                "com.google.android.youtube",
+                "com.android.chrome" // Google Chrome
+            )
+            fallbackPkgs.mapNotNull { pkgMap[it] }.take(3)
         }
     }
 
@@ -122,7 +157,6 @@ class CalendarViewModel(app: Application) : AndroidViewModel(app) {
             addCategory(Intent.CATEGORY_LAUNCHER)
         }
         return pm.queryIntentActivities(intent, 0)
-            .filter { it.activityInfo.packageName != ctx.packageName }
             .map { info ->
                 InstalledApp(
                     packageName = info.activityInfo.packageName,
