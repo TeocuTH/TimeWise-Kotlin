@@ -122,195 +122,220 @@ fun AddEventSheet(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .verticalScroll(rememberScrollState())
                 .padding(horizontal = 20.dp)
                 .padding(bottom = 32.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
-            // Header
-            Row(
-                modifier          = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
+            Column(
+                modifier = Modifier
+                    .weight(1f, fill = false)
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(16.dp),
             ) {
-                Text(
-                    text       = if (isEditing) "Edit event" else "New event",
-                    style      = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.Bold,
-                )
-                if (isEditing) {
-                    IconButton(onClick = { showDeleteConfirm = true }) {
-                        Icon(
-                            Icons.Outlined.DeleteOutline,
-                            contentDescription = "Delete event",
-                            tint = MaterialTheme.colorScheme.error,
-                        )
+                // Header
+                Row(
+                    modifier          = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        text       = if (isEditing) "Edit event" else "New event",
+                        style      = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold,
+                    )
+                    if (isEditing) {
+                        IconButton(onClick = { showDeleteConfirm = true }) {
+                            Icon(
+                                Icons.Outlined.DeleteOutline,
+                                contentDescription = "Delete event",
+                                tint = MaterialTheme.colorScheme.error,
+                            )
+                        }
                     }
                 }
-            }
 
-            // Title
-            OutlinedTextField(
-                value         = title,
-                onValueChange = { title = it },
-                label         = { Text("Title") },
-                singleLine    = true,
-                modifier      = Modifier.fillMaxWidth(),
-                shape         = RoundedCornerShape(12.dp),
-            )
-
-            // Description
-            OutlinedTextField(
-                value         = description,
-                onValueChange = { description = it },
-                label         = { Text("Description (optional)") },
-                maxLines      = 3,
-                modifier      = Modifier.fillMaxWidth(),
-                shape         = RoundedCornerShape(12.dp),
-            )
-
-            // Date selection
-            val displayDate = remember(date) {
-                runCatching {
-                    LocalDate.parse(date).format(DateTimeFormatter.ofPattern("dd/MM/yyyy"))
-                }.getOrDefault(date)
-            }
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable { showDatePicker = true }
-            ) {
+                // Title
                 OutlinedTextField(
-                    value         = displayDate,
-                    onValueChange = { },
-                    label         = { Text("Date") },
-                    readOnly      = true,
+                    value         = title,
+                    onValueChange = { title = it },
+                    label         = { Text("Title") },
+                    singleLine    = true,
                     modifier      = Modifier.fillMaxWidth(),
                     shape         = RoundedCornerShape(12.dp),
-                    trailingIcon  = {
-                        Icon(Icons.Outlined.CalendarMonth, contentDescription = "Select date")
-                    },
-                    enabled       = false,
-                    colors        = OutlinedTextFieldDefaults.colors(
-                        disabledTextColor = MaterialTheme.colorScheme.onSurface,
-                        disabledBorderColor = MaterialTheme.colorScheme.outline,
-                        disabledLabelColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                        disabledTrailingIconColor = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
                 )
-            }
 
-            // Time row
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                TimeField(
-                    label    = "Start",
-                    value    = startTime,
-                    onChange = { startTime = it },
-                    modifier = Modifier.weight(1f),
+                // Description
+                OutlinedTextField(
+                    value         = description,
+                    onValueChange = { description = it },
+                    label         = { Text("Description (optional)") },
+                    maxLines      = 3,
+                    modifier      = Modifier.fillMaxWidth(),
+                    shape         = RoundedCornerShape(12.dp),
                 )
-                TimeField(
-                    label    = "End",
-                    value    = endTime,
-                    onChange = { endTime = it },
-                    modifier = Modifier.weight(1f),
-                )
-            }
 
-            // Color picker
-            SectionLabel("Colour")
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                EventColor.entries.forEach { c ->
-                    val selected = c == color
-                    Box(
-                        modifier = Modifier
-                            .size(36.dp)
-                            .clip(CircleShape)
-                            .background(c.color())
-                            .border(
-                                width = if (selected) 3.dp else 0.dp,
-                                color = if (selected) MaterialTheme.colorScheme.onSurface else Color.Transparent,
-                                shape = CircleShape,
-                            )
-                            .clickable { color = c },
+                // Date selection
+                val displayDate = remember(date) {
+                    runCatching {
+                        LocalDate.parse(date).format(DateTimeFormatter.ofPattern("dd/MM/yyyy"))
+                    }.getOrDefault(date)
+                }
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { showDatePicker = true }
+                ) {
+                    OutlinedTextField(
+                        value         = displayDate,
+                        onValueChange = { },
+                        label         = { Text("Date") },
+                        readOnly      = true,
+                        modifier      = Modifier.fillMaxWidth(),
+                        shape         = RoundedCornerShape(12.dp),
+                        trailingIcon  = {
+                            Icon(Icons.Outlined.CalendarMonth, contentDescription = "Select date")
+                        },
+                        enabled       = false,
+                        colors        = OutlinedTextFieldDefaults.colors(
+                            disabledTextColor = MaterialTheme.colorScheme.onSurface,
+                            disabledBorderColor = MaterialTheme.colorScheme.outline,
+                            disabledLabelColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                            disabledTrailingIconColor = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
                     )
                 }
-            }
 
-            // Blocked apps section
-            SectionLabel("Block apps during this event")
-
-            if (blocked.isEmpty()) {
-                OutlinedButton(
-                    onClick = { showAppPicker = !showAppPicker },
+                // Time row
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
                     modifier = Modifier.fillMaxWidth(),
-                    shape    = RoundedCornerShape(12.dp),
                 ) {
-                    Icon(Icons.Outlined.Add, contentDescription = null)
-                    Spacer(Modifier.width(8.dp))
-                    Text("Add apps to block")
+                    TimeField(
+                        label    = "Start",
+                        value    = startTime,
+                        onChange = { startTime = it },
+                        modifier = Modifier.weight(1f),
+                    )
+                    TimeField(
+                        label    = "End",
+                        value    = endTime,
+                        onChange = { endTime = it },
+                        modifier = Modifier.weight(1f),
+                    )
                 }
-            } else {
-                // Chips for selected apps
-                val selectedInfos = installedApps.filter { blocked.contains(it.packageName) }
-                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    selectedInfos.forEach { app ->
-                        SelectedAppChip(
-                            app     = app,
-                            onRemove = { blocked = blocked - app.packageName },
-                        )
-                    }
-                    TextButton(
-                        onClick  = { showAppPicker = !showAppPicker },
-                        modifier = Modifier.align(Alignment.Start),
-                    ) {
-                        Icon(Icons.Outlined.Add, contentDescription = null, modifier = Modifier.size(16.dp))
-                        Spacer(Modifier.width(4.dp))
-                        Text("Add more")
-                    }
-                }
-            }
 
-            // Inline app picker (toggles open/closed)
-            if (showAppPicker) {
-                Card(
-                    shape  = RoundedCornerShape(14.dp),
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.surfaceVariant
-                    ),
-                ) {
-                    Column(modifier = Modifier.padding(12.dp)) {
-                        OutlinedTextField(
-                            value         = appSearch,
-                            onValueChange = { appSearch = it },
-                            placeholder   = { Text("Search apps…") },
-                            leadingIcon   = { Icon(Icons.Outlined.Search, null) },
-                            singleLine    = true,
-                            shape         = RoundedCornerShape(10.dp),
-                            modifier      = Modifier.fillMaxWidth(),
+                // Color picker
+                SectionLabel("Colour")
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    EventColor.entries.forEach { c ->
+                        val selected = c == color
+                        Box(
+                            modifier = Modifier
+                                .size(36.dp)
+                                .clip(CircleShape)
+                                .background(c.color())
+                                .border(
+                                    width = if (selected) 3.dp else 0.dp,
+                                    color = if (selected) MaterialTheme.colorScheme.onSurface else Color.Transparent,
+                                    shape = CircleShape,
+                                )
+                                .clickable { color = c },
                         )
-                        Spacer(Modifier.height(8.dp))
-                        val filtered = installedApps.filter {
-                            it.appName.contains(appSearch, ignoreCase = true)
+                    }
+                }
+
+                // Blocked apps section
+                SectionLabel("Block apps during this event")
+
+                if (blocked.isEmpty()) {
+                    OutlinedButton(
+                        onClick = { showAppPicker = !showAppPicker },
+                        modifier = Modifier.fillMaxWidth(),
+                        shape    = RoundedCornerShape(12.dp),
+                    ) {
+                        Icon(Icons.Outlined.Add, contentDescription = null)
+                        Spacer(Modifier.width(8.dp))
+                        Text("Add apps to block")
+                    }
+                } else {
+                    // Chips for selected apps
+                    val selectedInfos = installedApps.filter { blocked.contains(it.packageName) }
+                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        selectedInfos.forEach { app ->
+                            SelectedAppChip(
+                                app     = app,
+                                onRemove = { blocked = blocked - app.packageName },
+                            )
                         }
-                        // Fixed-height scrollable list inside the card
-                        LazyColumn(
-                            modifier            = Modifier.heightIn(max = 260.dp),
-                            verticalArrangement = Arrangement.spacedBy(2.dp),
+                        TextButton(
+                            onClick  = { showAppPicker = !showAppPicker },
+                            modifier = Modifier.align(Alignment.Start),
                         ) {
-                            if (appSearch.isEmpty() && suggestedApps.isNotEmpty()) {
-                                item {
-                                    Box(Modifier.padding(top = 4.dp, bottom = 4.dp)) {
-                                        SectionLabel("Suggested")
+                            Icon(Icons.Outlined.Add, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(Modifier.width(4.dp))
+                            Text("Add more")
+                        }
+                    }
+                }
+
+                // Inline app picker (toggles open/closed)
+                if (showAppPicker) {
+                    Card(
+                        shape  = RoundedCornerShape(14.dp),
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.surfaceVariant
+                        ),
+                    ) {
+                        Column(modifier = Modifier.padding(12.dp)) {
+                            OutlinedTextField(
+                                value         = appSearch,
+                                onValueChange = { appSearch = it },
+                                placeholder   = { Text("Search apps…") },
+                                leadingIcon   = { Icon(Icons.Outlined.Search, null) },
+                                singleLine    = true,
+                                shape         = RoundedCornerShape(10.dp),
+                                modifier      = Modifier.fillMaxWidth(),
+                            )
+                            Spacer(Modifier.height(8.dp))
+                            val filtered = installedApps.filter {
+                                it.appName.contains(appSearch, ignoreCase = true)
+                            }
+                            // Fixed-height scrollable list inside the card
+                            LazyColumn(
+                                modifier            = Modifier.heightIn(max = 260.dp),
+                                verticalArrangement = Arrangement.spacedBy(2.dp),
+                            ) {
+                                if (appSearch.isEmpty() && suggestedApps.isNotEmpty()) {
+                                    item {
+                                        Box(Modifier.padding(top = 4.dp, bottom = 4.dp)) {
+                                            SectionLabel("Suggested")
+                                        }
+                                    }
+                                    items(suggestedApps, key = { "sug_${it.packageName}" }) { app ->
+                                        AppPickerRow(
+                                            app      = app,
+                                            checked  = blocked.contains(app.packageName),
+                                            onToggle = {
+                                                blocked = if (blocked.contains(app.packageName))
+                                                    blocked - app.packageName
+                                                else
+                                                    blocked + app.packageName
+                                            },
+                                        )
+                                    }
+                                    item {
+                                        HorizontalDivider(
+                                            modifier  = Modifier.padding(vertical = 8.dp, horizontal = 4.dp),
+                                            thickness = 0.5.dp,
+                                            color     = MaterialTheme.colorScheme.outlineVariant
+                                        )
                                     }
                                 }
-                                items(suggestedApps, key = { "sug_${it.packageName}" }) { app ->
+
+                                items(filtered, key = { it.packageName }) { app ->
                                     AppPickerRow(
-                                        app      = app,
-                                        checked  = blocked.contains(app.packageName),
-                                        onToggle = {
+                                        app       = app,
+                                        checked   = blocked.contains(app.packageName),
+                                        onToggle  = {
                                             blocked = if (blocked.contains(app.packageName))
                                                 blocked - app.packageName
                                             else
@@ -318,33 +343,13 @@ fun AddEventSheet(
                                         },
                                     )
                                 }
-                                item {
-                                    HorizontalDivider(
-                                        modifier  = Modifier.padding(vertical = 8.dp, horizontal = 4.dp),
-                                        thickness = 0.5.dp,
-                                        color     = MaterialTheme.colorScheme.outlineVariant
-                                    )
-                                }
-                            }
-
-                            items(filtered, key = { it.packageName }) { app ->
-                                AppPickerRow(
-                                    app       = app,
-                                    checked   = blocked.contains(app.packageName),
-                                    onToggle  = {
-                                        blocked = if (blocked.contains(app.packageName))
-                                            blocked - app.packageName
-                                        else
-                                            blocked + app.packageName
-                                    },
-                                )
                             }
                         }
                     }
                 }
             }
 
-            Spacer(Modifier.height(8.dp))
+            Spacer(Modifier.height(16.dp))
 
             // Save button
             Button(
