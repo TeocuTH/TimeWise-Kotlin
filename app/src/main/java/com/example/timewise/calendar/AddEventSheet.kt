@@ -26,7 +26,11 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.core.graphics.drawable.toBitmap
+import java.time.Instant
+import java.time.LocalDate
 import java.time.LocalTime
+import java.time.ZoneId
+import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
 
 private fun EventColor.label() = when (this) {
@@ -56,6 +60,7 @@ fun AddEventSheet(
 ) {
     var title       by remember { mutableStateOf(initial.title) }
     var description by remember { mutableStateOf(initial.description) }
+    var date        by remember { mutableStateOf(initial.date) }
     var startTime   by remember { mutableStateOf(initial.startTime) }
     var endTime     by remember { mutableStateOf(initial.endTime) }
     var color       by remember { mutableStateOf(initial.color) }
@@ -63,6 +68,35 @@ fun AddEventSheet(
     var showAppPicker by remember { mutableStateOf(false) }
     var appSearch   by remember { mutableStateOf("") }
     var showDeleteConfirm by remember { mutableStateOf(false) }
+    var showDatePicker    by remember { mutableStateOf(false) }
+
+    if (showDatePicker) {
+        val datePickerState = rememberDatePickerState(
+            initialSelectedDateMillis = LocalDate.parse(date)
+                .atStartOfDay(ZoneId.systemDefault())
+                .toInstant()
+                .toEpochMilli()
+        )
+        DatePickerDialog(
+            onDismissRequest = { showDatePicker = false },
+            confirmButton = {
+                TextButton(onClick = {
+                    datePickerState.selectedDateMillis?.let { millis ->
+                        date = Instant.ofEpochMilli(millis)
+                            .atZone(ZoneId.of("UTC"))
+                            .toLocalDate()
+                            .toString()
+                    }
+                    showDatePicker = false
+                }) { Text("OK") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDatePicker = false }) { Text("Cancel") }
+            }
+        ) {
+            DatePicker(state = datePickerState)
+        }
+    }
 
     if (showDeleteConfirm) {
         AlertDialog(
@@ -134,6 +168,37 @@ fun AddEventSheet(
                 modifier      = Modifier.fillMaxWidth(),
                 shape         = RoundedCornerShape(12.dp),
             )
+
+            // Date selection
+            val displayDate = remember(date) {
+                runCatching {
+                    LocalDate.parse(date).format(DateTimeFormatter.ofPattern("dd/MM/yyyy"))
+                }.getOrDefault(date)
+            }
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { showDatePicker = true }
+            ) {
+                OutlinedTextField(
+                    value         = displayDate,
+                    onValueChange = { },
+                    label         = { Text("Date") },
+                    readOnly      = true,
+                    modifier      = Modifier.fillMaxWidth(),
+                    shape         = RoundedCornerShape(12.dp),
+                    trailingIcon  = {
+                        Icon(Icons.Outlined.CalendarMonth, contentDescription = "Select date")
+                    },
+                    enabled       = false,
+                    colors        = OutlinedTextFieldDefaults.colors(
+                        disabledTextColor = MaterialTheme.colorScheme.onSurface,
+                        disabledBorderColor = MaterialTheme.colorScheme.outline,
+                        disabledLabelColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                        disabledTrailingIconColor = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                )
+            }
 
             // Time row
             Row(
@@ -288,6 +353,7 @@ fun AddEventSheet(
                         initial.copy(
                             title       = title.trim(),
                             description = description.trim(),
+                            date        = date,
                             startTime   = startTime,
                             endTime     = endTime,
                             color       = color,
