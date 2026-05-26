@@ -23,7 +23,11 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.painter.BitmapPainter
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.core.graphics.drawable.toBitmap
+import java.time.LocalTime
+import java.time.format.DateTimeFormatter
 
 private fun EventColor.label() = when (this) {
     EventColor.PURPLE -> "Purple"
@@ -44,6 +48,7 @@ private fun EventColor.color() = when (this) {
 fun AddEventSheet(
     initial: CalendarEvent,
     installedApps: List<InstalledApp>,
+    suggestedApps: List<InstalledApp>,
     isEditing: Boolean,
     onSave: (CalendarEvent) -> Unit,
     onDelete: (String) -> Unit,
@@ -230,6 +235,33 @@ fun AddEventSheet(
                             modifier            = Modifier.heightIn(max = 260.dp),
                             verticalArrangement = Arrangement.spacedBy(2.dp),
                         ) {
+                            if (appSearch.isEmpty() && suggestedApps.isNotEmpty()) {
+                                item {
+                                    Box(Modifier.padding(top = 4.dp, bottom = 4.dp)) {
+                                        SectionLabel("Suggested")
+                                    }
+                                }
+                                items(suggestedApps, key = { "sug_${it.packageName}" }) { app ->
+                                    AppPickerRow(
+                                        app      = app,
+                                        checked  = blocked.contains(app.packageName),
+                                        onToggle = {
+                                            blocked = if (blocked.contains(app.packageName))
+                                                blocked - app.packageName
+                                            else
+                                                blocked + app.packageName
+                                        },
+                                    )
+                                }
+                                item {
+                                    HorizontalDivider(
+                                        modifier  = Modifier.padding(vertical = 8.dp, horizontal = 4.dp),
+                                        thickness = 0.5.dp,
+                                        color     = MaterialTheme.colorScheme.outlineVariant
+                                    )
+                                }
+                            }
+
                             items(filtered, key = { it.packageName }) { app ->
                                 AppPickerRow(
                                     app       = app,
@@ -284,6 +316,7 @@ private fun SectionLabel(text: String) {
     )
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun TimeField(
     label: String,
@@ -291,27 +324,97 @@ private fun TimeField(
     onChange: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    // Simple text field — accepts "HH:mm" format
-    // Auto-inserts colon and clamps hours/minutes on focus loss
-    var raw by remember(value) { mutableStateOf(value) }
-
-    OutlinedTextField(
-        value         = raw,
-        onValueChange = { input ->
-            val digits = input.filter { it.isDigit() }.take(4)
-            raw = when {
-                digits.length >= 3 -> "${digits.take(2)}:${digits.drop(2)}"
-                else               -> digits
-            }
-            if (raw.length == 5) onChange(raw)
-        },
-        label         = { Text(label) },
-        singleLine    = true,
-        placeholder   = { Text("HH:mm") },
-        leadingIcon   = { Icon(Icons.Outlined.AccessTime, null, modifier = Modifier.size(18.dp)) },
-        modifier      = modifier,
-        shape         = RoundedCornerShape(12.dp),
+    var showPicker by remember { mutableStateOf(false) }
+    val time = remember(value) {
+        runCatching { LocalTime.parse(value) }.getOrDefault(LocalTime.of(12, 0))
+    }
+    val state = rememberTimePickerState(
+        initialHour = time.hour,
+        initialMinute = time.minute,
+        is24Hour = true
     )
+
+    if (showPicker) {
+        TimePickerDialog(
+            onDismissRequest = { showPicker = false },
+            confirmButton = {
+                TextButton(onClick = {
+                    val newTime = LocalTime.of(state.hour, state.minute)
+                    onChange(newTime.format(DateTimeFormatter.ofPattern("HH:mm")))
+                    showPicker = false
+                }) { Text("OK") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showPicker = false }) { Text("Cancel") }
+            }
+        ) {
+            TimePicker(state = state)
+        }
+    }
+
+    Box(modifier = modifier) {
+        OutlinedTextField(
+            value         = value,
+            onValueChange = { },
+            label         = { Text(label) },
+            readOnly      = true,
+            leadingIcon   = { Icon(Icons.Outlined.AccessTime, null, modifier = Modifier.size(18.dp)) },
+            modifier      = Modifier.fillMaxWidth(),
+            shape         = RoundedCornerShape(12.dp),
+        )
+        // Invisible clickable overlay to trigger the picker
+        Box(
+            modifier = Modifier
+                .matchParentSize()
+                .clickable { showPicker = true }
+        )
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun TimePickerDialog(
+    onDismissRequest: () -> Unit,
+    confirmButton: @Composable () -> Unit,
+    dismissButton: @Composable () -> Unit,
+    content: @Composable () -> Unit,
+) {
+    Dialog(
+        onDismissRequest = onDismissRequest,
+        properties = DialogProperties(usePlatformDefaultWidth = false),
+    ) {
+        Surface(
+            shape = MaterialTheme.shapes.extraLarge,
+            tonalElevation = 6.dp,
+            modifier = Modifier
+                .width(IntrinsicSize.Min)
+                .height(IntrinsicSize.Min),
+            color = MaterialTheme.colorScheme.surface
+        ) {
+            Column(
+                modifier = Modifier.padding(24.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Text(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 20.dp),
+                    text = "Select time",
+                    style = MaterialTheme.typography.labelMedium
+                )
+                content()
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 16.dp),
+                    horizontalArrangement = Arrangement.End
+                ) {
+                    dismissButton()
+                    confirmButton()
+                }
+            }
+        }
+    }
 }
 
 @Composable

@@ -52,7 +52,7 @@ private sealed class Screen(
     object Stats    : Screen("stats",    "Stats",    Icons.Outlined.BarChart)
 }
 
-private val bottomNavScreens = listOf(Screen.Home, Screen.Calendar, Screen.Apps, Screen.Stats)
+private val bottomNavScreens = listOf(Screen.Home, Screen.Calendar, Screen.Stats)
 
 @Composable
 fun TimewiseApp() {

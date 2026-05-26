@@ -61,13 +61,21 @@ class BlockingActivity : ComponentActivity() {
     }
 
     override fun onBackPressed() {
+        super.onBackPressed()
         // Back = resisted
-        prefs.recordInterception(resisted = true)
-        finishAffinity()
+        recordAndClose(resisted = true)
     }
 
     private fun recordAndClose(resisted: Boolean) {
         prefs.recordInterception(resisted)
+        if (resisted) {
+            // Navigate to home screen to stop the loop
+            val homeIntent = Intent(Intent.ACTION_MAIN).apply {
+                addCategory(Intent.CATEGORY_HOME)
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK
+            }
+            startActivity(homeIntent)
+        }
         finishAffinity()
     }
 
