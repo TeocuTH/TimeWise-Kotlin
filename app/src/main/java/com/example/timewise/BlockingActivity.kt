@@ -48,6 +48,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.graphics.drawable.toBitmap
 import com.example.timewise.ui.theme.TimewiseTheme
+import androidx.compose.foundation.layout.fillMaxSize
 
 /**
  * Stays a separate Activity so Android can launch it over foreign apps.
@@ -255,17 +256,35 @@ fun BlockingScreen(
                 .padding(horizontal = 32.dp)
                 .fillMaxWidth()
         ) {
-            if (appIcon != null) {
-                Image(
-                    bitmap = appIcon.toBitmap(width = 128, height = 128).asImageBitmap(),
-                    contentDescription = "$appName icon",
-                    modifier = Modifier.size(72.dp)
-                )
-            } else {
+            Box(
+                modifier = Modifier.size(72.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                if (appIcon != null) {
+                    Image(
+                        bitmap = appIcon.toBitmap(width = 128, height = 128).asImageBitmap(),
+                        contentDescription = "$appName icon",
+                        modifier = Modifier.fillMaxSize()
+                    )
+
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .background(Color.Black.copy(alpha = 0.25f))
+                    )
+                } else {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .background(Color.Black.copy(alpha = 0.25f))
+                    )
+                }
+
                 Text(
-                    text = "⏸",
-                    fontSize = 56.sp,
-                    color = Color(0xFF6C63FF)
+                    text = "II",
+                    fontSize = 46.sp,
+                    color = Color.White.copy(alpha = 0.95f),
+                    textAlign = TextAlign.Center
                 )
             }
 
