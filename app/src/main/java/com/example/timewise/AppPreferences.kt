@@ -80,10 +80,10 @@ class AppPreferences(context: Context) {
 
     fun recordInterception(resisted: Boolean) {
         totalInterceptions++
-        if (resisted){
+        if (resisted) {
             totalResisted++
-            statsRepo.recordInterception(resisted)
         }
+        statsRepo.recordInterception(resisted)
     }
 
     companion object {

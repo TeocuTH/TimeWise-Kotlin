@@ -26,6 +26,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.core.graphics.drawable.toBitmap
+import kotlinx.coroutines.delay
 import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalTime
@@ -69,6 +70,16 @@ fun AddEventSheet(
     var appSearch   by remember { mutableStateOf("") }
     var showDeleteConfirm by remember { mutableStateOf(false) }
     var showDatePicker    by remember { mutableStateOf(false) }
+
+    val scrollState = rememberScrollState()
+
+    LaunchedEffect(showAppPicker) {
+        if (showAppPicker) {
+            // Give composition a moment to layout the new picker before scrolling
+            delay(100)
+            scrollState.animateScrollTo(scrollState.maxValue)
+        }
+    }
 
     if (showDatePicker) {
         val datePickerState = rememberDatePickerState(
@@ -127,8 +138,8 @@ fun AddEventSheet(
         ) {
             Column(
                 modifier = Modifier
-                    .weight(1f, fill = false)
-                    .verticalScroll(rememberScrollState()),
+                    .weight(1f, fill = showAppPicker)
+                    .verticalScroll(scrollState),
                 verticalArrangement = Arrangement.spacedBy(16.dp),
             ) {
                 // Header
@@ -301,7 +312,7 @@ fun AddEventSheet(
                             }
                             // Fixed-height scrollable list inside the card
                             LazyColumn(
-                                modifier            = Modifier.heightIn(max = 260.dp),
+                                modifier            = Modifier.heightIn(max = 600.dp),
                                 verticalArrangement = Arrangement.spacedBy(2.dp),
                             ) {
                                 if (appSearch.isEmpty() && suggestedApps.isNotEmpty()) {

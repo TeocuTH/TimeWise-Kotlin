@@ -196,6 +196,7 @@ class CalendarViewModel(app: Application) : AndroidViewModel(app) {
                     icon        = info.loadIcon(pm),
                 )
             }
+            .filter { it.packageName != ctx.packageName }
             .sortedBy { it.appName.lowercase() }
     }
 

@@ -44,6 +44,11 @@ private val TealLight  = Color(0xFFE1F5EE)
 fun StatsScreen(vm: StatsViewModel = viewModel()) {
     val state by vm.uiState.collectAsState()
 
+    // Refresh data whenever the screen becomes visible
+    LaunchedEffect(Unit) {
+        vm.load()
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -153,6 +158,7 @@ private fun MetricCell(
             bottom = if (appIcon != null || icon != null) 5.dp else 12.dp
         )) {
             Text(label, style = MaterialTheme.typography.labelSmall,
+                fontSize = 12.sp,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = 1)
 
@@ -182,7 +188,7 @@ private fun MetricCell(
                 } else if (value.isNotEmpty()) {
                     Text(
                         value,
-                        fontSize = if (value.length > 8) 16.sp else 22.sp,
+                        fontSize = if (value.length > 8) 18.sp else 25.sp,
                         fontWeight = FontWeight.SemiBold,
                         color = valueColor,
                         maxLines = 1,
@@ -194,6 +200,7 @@ private fun MetricCell(
             Text(
                 text = unit.ifEmpty { " " }, // Keep space even if empty to maintain height
                 style = MaterialTheme.typography.labelSmall,
+                fontSize = 12.sp,
                 color = unitColor,
                 maxLines = 1
             )
@@ -245,14 +252,15 @@ private fun HoursSavedCard(minutesSaved: Int) {
 
             Text(
                 equiv,
-                fontSize   = 40.sp,
+                fontSize   = 44.sp,
                 fontWeight = FontWeight.Bold,
                 color      = Purple,
-                lineHeight = 44.sp,
+                lineHeight = 48.sp,
             )
             Text(
                 equivLabel,
                 style = MaterialTheme.typography.bodyMedium,
+                fontSize = 16.sp,
                 color = Color(0xFF534AB7),
             )
 
@@ -426,7 +434,7 @@ private fun OutcomesCard(interceptions: Int, resisted: Int) {
         Column(Modifier.padding(16.dp)) {
             Text("Blocking outcomes", fontWeight = FontWeight.SemiBold,
                 style = MaterialTheme.typography.titleSmall)
-            Text("When the overlay appeared this week",
+            Text("How many times you have resisted this week",
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant)
 
@@ -492,10 +500,12 @@ private fun OutcomesCard(interceptions: Int, resisted: Int) {
 private fun OutcomeStat(label: String, value: Int, color: Color, bg: Color) {
     Column {
         Text(label, style = MaterialTheme.typography.labelSmall,
+            fontSize = 12.sp,
             color = MaterialTheme.colorScheme.onSurfaceVariant)
         Row(verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-            Text("$value", fontSize = 20.sp, fontWeight = FontWeight.SemiBold, color = color)
+            Text("$value", fontSize = 22.sp, fontWeight = FontWeight.SemiBold, color = color)
             Text("times", style = MaterialTheme.typography.labelSmall,
+                fontSize = 12.sp,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(bottom = 2.dp))
         }
@@ -613,12 +623,14 @@ private fun AppUsageBarRow(app: AppUsageInfo, maxUsage: Long) {
                 Text(
                     app.appName,
                     style = MaterialTheme.typography.labelMedium,
+                    fontSize = 13.sp,
                     fontWeight = FontWeight.Medium,
                     maxLines = 1
                 )
                 Text(
                     if (hours >= 1f) "%.1fh %dm".format(hours, minutes) else "${minutes}m",
                     style = MaterialTheme.typography.labelSmall,
+                    fontSize = 12.sp,
                     color = Purple,
                     fontWeight = FontWeight.SemiBold
                 )

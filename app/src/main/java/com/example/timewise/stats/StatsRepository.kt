@@ -299,7 +299,7 @@ class StatsRepository(private val context: Context) {
             .mapValues { (dow, total) -> total / (counts[dow] ?: 1) }
             .maxByOrNull { it.value }
             ?.key
-            ?.getDisplayName(java.time.format.TextStyle.FULL, java.util.Locale.getDefault())
+            ?.getDisplayName(java.time.format.TextStyle.FULL, java.util.Locale.ENGLISH)
             ?: "Wednesday"
     }
 
