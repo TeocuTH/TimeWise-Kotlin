@@ -1,27 +1,52 @@
 package com.example.timewise
 
-import android.app.Activity
 import android.content.Intent
+import android.graphics.drawable.Drawable
 import android.os.Bundle
 import android.os.CountDownTimer
 import android.os.Handler
 import android.os.Looper
 import android.view.WindowManager
-import androidx.activity.compose.setContent
 import androidx.activity.ComponentActivity
-import androidx.compose.animation.core.*
+import androidx.activity.compose.setContent
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.graphics.drawable.toBitmap
 import com.example.timewise.ui.theme.TimewiseTheme
 
 /**
@@ -34,6 +59,7 @@ class BlockingActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
         prefs = AppPreferences(this)
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
 
@@ -41,16 +67,18 @@ class BlockingActivity : ComponentActivity() {
             ?: AppMonitorService.instance?.lastBlockedPackage
 
         val appName = resolveAppName(blockedPackage)
+        val appIcon = resolveAppIcon(blockedPackage)
         val message = pickMessage(blockedPackage)
         val delayMs = prefs.delayMillis
 
         setContent {
             TimewiseTheme(darkTheme = true) {
                 BlockingScreen(
-                    appName    = appName,
-                    message    = message,
-                    delayMs    = delayMs,
-                    onResist   = { recordAndClose(resisted = true) },
+                    appName = appName,
+                    appIcon = appIcon,
+                    message = message,
+                    delayMs = delayMs,
+                    onResist = { recordAndClose(resisted = true) },
                     onContinue = {
                         recordAndClose(resisted = false)
                         openApp(blockedPackage)
@@ -60,28 +88,30 @@ class BlockingActivity : ComponentActivity() {
         }
     }
 
+    @Deprecated("Deprecated in Java")
     override fun onBackPressed() {
-        super.onBackPressed()
-        // Back = resisted
         recordAndClose(resisted = true)
     }
 
     private fun recordAndClose(resisted: Boolean) {
         prefs.recordInterception(resisted)
+
         if (resisted) {
-            // Navigate to home screen to stop the loop
             val homeIntent = Intent(Intent.ACTION_MAIN).apply {
                 addCategory(Intent.CATEGORY_HOME)
                 flags = Intent.FLAG_ACTIVITY_NEW_TASK
             }
             startActivity(homeIntent)
         }
+
         finishAffinity()
     }
 
     private fun openApp(packageName: String?) {
         if (packageName == null) return
+
         AppMonitorService.pause(this, prefs.gracePeriodMillis)
+
         Handler(Looper.getMainLooper()).postDelayed({
             packageManager.getLaunchIntentForPackage(packageName)?.apply {
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
@@ -92,19 +122,50 @@ class BlockingActivity : ComponentActivity() {
 
     private fun resolveAppName(pkg: String?): String {
         if (pkg == null) return "this app"
+
         return try {
             val info = packageManager.getApplicationInfo(pkg, 0)
             packageManager.getApplicationLabel(info).toString()
-        } catch (e: Exception) { pkg }
+        } catch (e: Exception) {
+            pkg
+        }
+    }
+
+    private fun resolveAppIcon(pkg: String?): Drawable? {
+        if (pkg == null) return null
+
+        return try {
+            val info = packageManager.getApplicationInfo(pkg, 0)
+            packageManager.getApplicationIcon(info)
+        } catch (e: Exception) {
+            null
+        }
     }
 
     private fun pickMessage(pkg: String?): String {
         val p = pkg?.lowercase() ?: ""
-        val social  = listOf("instagram","tiktok","facebook","twitter","snapchat","reddit")
-        val video   = listOf("youtube","netflix","twitch","disney","hulu","prime")
+
+        val social = listOf(
+            "instagram",
+            "tiktok",
+            "facebook",
+            "twitter",
+            "snapchat",
+            "reddit"
+        )
+
+        val video = listOf(
+            "youtube",
+            "netflix",
+            "twitch",
+            "disney",
+            "hulu",
+            "prime"
+        )
+
         return when {
             social.any { p.contains(it) } -> SOCIAL_MESSAGES.random()
-            video.any  { p.contains(it) } -> VIDEO_MESSAGES.random()
+            video.any { p.contains(it) } -> VIDEO_MESSAGES.random()
             else -> GENERIC_MESSAGES.random()
         }
     }
@@ -117,10 +178,12 @@ class BlockingActivity : ComponentActivity() {
             "You opened this without thinking.\nThat's the trap — notice it.",
             "Everyone there is also mindlessly scrolling.\nBe the one who isn't.",
         )
+
         val VIDEO_MESSAGES = listOf(
             "One more episode is rarely just one.\nIs this what you planned?",
             "Your future self is watching.\nWhat would they want you to do?",
         )
+
         val GENERIC_MESSAGES = listOf(
             "Take a breath.\nWas this intentional, or just habit?",
             "You marked this app as a distraction.\nPast-you was right.",
@@ -134,26 +197,42 @@ class BlockingActivity : ComponentActivity() {
 @Composable
 fun BlockingScreen(
     appName: String,
+    appIcon: Drawable?,
     message: String,
     delayMs: Long,
     onResist: () -> Unit,
     onContinue: () -> Unit,
 ) {
-    var millisLeft    by remember { mutableLongStateOf(delayMs) }
-    var countdownDone by remember { mutableStateOf(false) }
+    var millisLeft by remember { mutableLongStateOf(delayMs) }
+    var countdownDone by remember { mutableStateOf(delayMs <= 0L) }
 
-    DisposableEffect(Unit) {
-        val timer = object : CountDownTimer(delayMs, 100) {
-            override fun onTick(remaining: Long) { millisLeft = remaining }
-            override fun onFinish() { millisLeft = 0; countdownDone = true }
-        }.start()
-        onDispose { timer.cancel() }
+    DisposableEffect(delayMs) {
+        if (delayMs <= 0L) {
+            countdownDone = true
+            millisLeft = 0L
+            onDispose { }
+        } else {
+            val timer = object : CountDownTimer(delayMs, 100) {
+                override fun onTick(remaining: Long) {
+                    millisLeft = remaining
+                }
+
+                override fun onFinish() {
+                    millisLeft = 0L
+                    countdownDone = true
+                }
+            }.start()
+
+            onDispose {
+                timer.cancel()
+            }
+        }
     }
 
     val progress by animateFloatAsState(
-        targetValue   = if (delayMs > 0) millisLeft.toFloat() / delayMs else 0f,
+        targetValue = if (delayMs > 0L) millisLeft.toFloat() / delayMs else 0f,
         animationSpec = tween(durationMillis = 100, easing = LinearEasing),
-        label         = "countdown"
+        label = "countdown"
     )
 
     Box(
@@ -162,9 +241,8 @@ fun BlockingScreen(
             .background(Color(0xFF0F0F14)),
         contentAlignment = Alignment.Center
     ) {
-        // Accent bar at top
         Box(
-            Modifier
+            modifier = Modifier
                 .fillMaxWidth()
                 .height(4.dp)
                 .background(Color(0xFF6C63FF))
@@ -173,75 +251,89 @@ fun BlockingScreen(
 
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
-            modifier            = Modifier
+            modifier = Modifier
                 .padding(horizontal = 32.dp)
                 .fillMaxWidth()
         ) {
-            // Pause symbol
-            Text("⏸", fontSize = 56.sp, color = Color(0xFF6C63FF))
+            if (appIcon != null) {
+                Image(
+                    bitmap = appIcon.toBitmap(width = 128, height = 128).asImageBitmap(),
+                    contentDescription = "$appName icon",
+                    modifier = Modifier.size(72.dp)
+                )
+            } else {
+                Text(
+                    text = "⏸",
+                    fontSize = 56.sp,
+                    color = Color(0xFF6C63FF)
+                )
+            }
 
             Spacer(Modifier.height(12.dp))
 
             Text(
-                text      = appName,
-                style     = MaterialTheme.typography.labelLarge,
-                color     = Color(0xFF9B9BA8),
+                text = appName,
+                style = MaterialTheme.typography.labelLarge,
+                color = Color(0xFF9B9BA8),
                 textAlign = TextAlign.Center
             )
 
             Spacer(Modifier.height(8.dp))
 
             Text(
-                text      = if (countdownDone) "Ready" else "Opening in ${(millisLeft / 1000) + 1}s",
-                style     = MaterialTheme.typography.titleLarge,
+                text = if (countdownDone) {
+                    "Ready"
+                } else {
+                    "Opening in ${(millisLeft / 1000) + 1}s"
+                },
+                style = MaterialTheme.typography.titleLarge,
                 fontWeight = FontWeight.SemiBold,
-                color     = Color.White,
+                color = Color.White,
                 textAlign = TextAlign.Center
             )
 
             Spacer(Modifier.height(16.dp))
 
-            // Progress bar
             LinearProgressIndicator(
-                progress          = { progress },
-                modifier          = Modifier
+                progress = { progress },
+                modifier = Modifier
                     .fillMaxWidth()
                     .height(4.dp),
-                color             = Color(0xFF6C63FF),
-                trackColor        = Color(0xFF2A2A38),
+                color = Color(0xFF6C63FF),
+                trackColor = Color(0xFF2A2A38),
             )
 
             Spacer(Modifier.height(32.dp))
 
             Text(
-                text      = message,
-                style     = MaterialTheme.typography.bodyLarge,
-                color     = Color(0xFFE0E0E8),
+                text = message,
+                style = MaterialTheme.typography.bodyLarge,
+                color = Color(0xFFE0E0E8),
                 textAlign = TextAlign.Center,
                 lineHeight = 26.sp
             )
 
             if (countdownDone) {
                 Spacer(Modifier.height(8.dp))
+
                 Text(
-                    text      = "Do you really want to open this?",
-                    style     = MaterialTheme.typography.bodyMedium,
-                    color     = Color(0xFF9B9BA8),
+                    text = "Do you really want to open this?",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = Color(0xFF9B9BA8),
                     textAlign = TextAlign.Center
                 )
             }
 
             Spacer(Modifier.height(40.dp))
 
-            // Buttons
             Row(
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Button(
-                    onClick  = onResist,
+                    onClick = onResist,
                     modifier = Modifier.weight(1f),
-                    colors   = ButtonDefaults.buttonColors(
+                    colors = ButtonDefaults.buttonColors(
                         containerColor = Color(0xFF6C63FF)
                     ),
                     shape = RoundedCornerShape(12.dp)
@@ -250,11 +342,11 @@ fun BlockingScreen(
                 }
 
                 OutlinedButton(
-                    onClick  = onContinue,
-                    enabled  = countdownDone,
+                    onClick = onContinue,
+                    enabled = countdownDone,
                     modifier = Modifier.weight(1f),
-                    shape    = RoundedCornerShape(12.dp),
-                    colors   = ButtonDefaults.outlinedButtonColors(
+                    shape = RoundedCornerShape(12.dp),
+                    colors = ButtonDefaults.outlinedButtonColors(
                         contentColor = Color(0xFF9B9BA8),
                         disabledContentColor = Color(0xFF4A4A58)
                     )
