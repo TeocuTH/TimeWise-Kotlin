@@ -64,10 +64,6 @@ class AppPreferences(context: Context) {
         get() = prefs.getLong(KEY_DELAY_MS, DEFAULT_DELAY_MS)
         set(value) = prefs.edit { putLong(KEY_DELAY_MS, value) }
 
-    var gracePeriodMillis: Long
-        get() = prefs.getLong(KEY_GRACE_MS, DEFAULT_GRACE_MS)
-        set(value) = prefs.edit { putLong(KEY_GRACE_MS, value) }
-
     // ── Stats ─────────────────────────────────────────────────────────────────
 
     var totalInterceptions: Int
@@ -92,11 +88,9 @@ class AppPreferences(context: Context) {
         private const val KEY_SESSION_START      = "session_start"
         private const val KEY_SESSION_DURATION   = "session_duration"
         private const val KEY_DELAY_MS           = "delay_ms"
-        private const val KEY_GRACE_MS           = "grace_ms"
         private const val KEY_TOTAL_INTERCEPTIONS = "total_interceptions"
         private const val KEY_TOTAL_RESISTED     = "total_resisted"
 
         const val DEFAULT_DELAY_MS  = 5_000L
-        const val DEFAULT_GRACE_MS  = 10_000L
     }
 }

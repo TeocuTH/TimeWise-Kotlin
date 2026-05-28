@@ -111,7 +111,7 @@ class BlockingActivity : ComponentActivity() {
     private fun openApp(packageName: String?) {
         if (packageName == null) return
 
-        AppMonitorService.pause(this, prefs.gracePeriodMillis)
+        AppMonitorService.pause(this, packageName)
 
         Handler(Looper.getMainLooper()).postDelayed({
             packageManager.getLaunchIntentForPackage(packageName)?.apply {

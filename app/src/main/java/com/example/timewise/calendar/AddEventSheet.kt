@@ -1,12 +1,15 @@
 package com.example.timewise.calendar
 
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -18,6 +21,10 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.painter.BitmapPainter
@@ -33,20 +40,6 @@ import java.time.LocalTime
 import java.time.ZoneId
 import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
-
-private fun EventColor.label() = when (this) {
-    EventColor.PURPLE -> "Purple"
-    EventColor.TEAL   -> "Teal"
-    EventColor.CORAL  -> "Coral"
-    EventColor.AMBER  -> "Amber"
-}
-
-private fun EventColor.color() = when (this) {
-    EventColor.PURPLE -> Color(0xFF6C63FF)
-    EventColor.TEAL   -> Color(0xFF1D9E75)
-    EventColor.CORAL  -> Color(0xFFD85A30)
-    EventColor.AMBER  -> Color(0xFFBA7517)
-}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -65,6 +58,7 @@ fun AddEventSheet(
     var startTime   by remember { mutableStateOf(initial.startTime) }
     var endTime     by remember { mutableStateOf(initial.endTime) }
     var color       by remember { mutableStateOf(initial.color) }
+    var showColorPicker by remember { mutableStateOf(false) }
     var blocked     by remember { mutableStateOf(initial.blockedApps.toSet()) }
     var showAppPicker by remember { mutableStateOf(false) }
     var appSearch   by remember { mutableStateOf("") }
@@ -122,6 +116,17 @@ fun AddEventSheet(
             dismissButton = {
                 TextButton(onClick = { showDeleteConfirm = false }) { Text("Cancel") }
             }
+        )
+    }
+
+    if (showColorPicker) {
+        ColorPickerDialog(
+            onDismissRequest = { showColorPicker = false },
+            onColorSelected = {
+                color = it
+                showColorPicker = false
+            },
+            selectedColor = color
         )
     }
 
@@ -236,20 +241,57 @@ fun AddEventSheet(
 
                 // Color picker
                 SectionLabel("Colour")
-                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    EventColor.entries.forEach { c ->
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    val defaultColors = listOf(EventColor.PURPLE, EventColor.TEAL, EventColor.CORAL, EventColor.AMBER)
+                    defaultColors.forEach { c ->
                         val selected = c == color
                         Box(
                             modifier = Modifier
                                 .size(36.dp)
                                 .clip(CircleShape)
-                                .background(c.color())
+                                .background(Color(c.accentHex))
                                 .border(
                                     width = if (selected) 3.dp else 0.dp,
                                     color = if (selected) MaterialTheme.colorScheme.onSurface else Color.Transparent,
                                     shape = CircleShape,
                                 )
                                 .clickable { color = c },
+                        )
+                    }
+                    
+                    if (defaultColors.contains(color)) {
+                        // "+" button for more colors
+                        Box(
+                            modifier = Modifier
+                                .size(36.dp)
+                                .clip(CircleShape)
+                                .background(MaterialTheme.colorScheme.surfaceVariant)
+                                .clickable { showColorPicker = true },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                Icons.Outlined.Add,
+                                contentDescription = "More colors",
+                                modifier = Modifier.size(20.dp),
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    } else {
+                        // Chosen non-default color replacing the "+" sign
+                        Box(
+                            modifier = Modifier
+                                .size(36.dp)
+                                .clip(CircleShape)
+                                .background(Color(color.accentHex))
+                                .border(
+                                    width = 3.dp,
+                                    color = MaterialTheme.colorScheme.onSurface,
+                                    shape = CircleShape,
+                                )
+                                .clickable { showColorPicker = true },
                         )
                     }
                 }
@@ -388,6 +430,103 @@ fun AddEventSheet(
 }
 
 // ── Reusable sub-composables ──────────────────────────────────────────────────
+
+@Composable
+fun ColorPickerDialog(
+    onDismissRequest: () -> Unit,
+    onColorSelected: (EventColor) -> Unit,
+    selectedColor: EventColor
+) {
+    val listState = rememberLazyListState()
+    
+    Dialog(onDismissRequest = onDismissRequest) {
+        Surface(
+            shape = RoundedCornerShape(28.dp),
+            tonalElevation = 6.dp,
+            modifier = Modifier
+                .fillMaxWidth(0.9f)
+                .heightIn(max = 500.dp),
+            color = MaterialTheme.colorScheme.surface
+        ) {
+            Column(
+                modifier = Modifier.padding(20.dp)
+            ) {
+                LazyColumn(
+                    state = listState,
+                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                    modifier = Modifier
+                        .weight(1f, fill = false)
+                        .padding(end = 8.dp) // Space for scrollbar
+                        .drawVerticalScrollbar(listState)
+                ) {
+                    items(EventColor.entries) { colorOption ->
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(12.dp))
+                                .clickable { onColorSelected(colorOption) }
+                                .padding(vertical = 12.dp, horizontal = 8.dp)
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(24.dp)
+                                    .clip(CircleShape)
+                                    .background(Color(colorOption.accentHex))
+                                    .border(
+                                        width = if (colorOption == selectedColor) 2.dp else 0.dp,
+                                        color = if (colorOption == selectedColor) MaterialTheme.colorScheme.onSurface else Color.Transparent,
+                                        shape = CircleShape
+                                    )
+                            )
+                            Spacer(Modifier.width(16.dp))
+                            Text(
+                                text = colorOption.label,
+                                style = MaterialTheme.typography.bodyLarge,
+                                color = if (colorOption == selectedColor) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun Modifier.drawVerticalScrollbar(
+    state: LazyListState,
+    width: androidx.compose.ui.unit.Dp = 4.dp
+): Modifier {
+    return this.drawWithContent {
+        drawContent()
+
+        val firstVisibleElementIndex = state.layoutInfo.visibleItemsInfo.firstOrNull()?.index
+        if (firstVisibleElementIndex != null) {
+            val totalItemsCount = state.layoutInfo.totalItemsCount
+            val visibleItemsCount = state.layoutInfo.visibleItemsInfo.size
+            
+            if (totalItemsCount > visibleItemsCount) {
+                val scrollbarFullHeight = this.size.height
+                val scrollbarHeight = (visibleItemsCount.toFloat() / totalItemsCount) * scrollbarFullHeight
+                
+                val firstVisibleItem = state.layoutInfo.visibleItemsInfo.firstOrNull()
+                if (firstVisibleItem != null) {
+                    val scrollbarOffsetY = (firstVisibleItem.index.toFloat() / totalItemsCount) * scrollbarFullHeight +
+                            (firstVisibleItem.offset.toFloat() / (totalItemsCount * firstVisibleItem.size).coerceAtLeast(1)) * scrollbarFullHeight
+
+                    drawRoundRect(
+                        color = Color.DarkGray,
+                        topLeft = Offset(this.size.width + 4.dp.toPx(), scrollbarOffsetY),
+                        size = Size(width.toPx(), scrollbarHeight),
+                        cornerRadius = CornerRadius(width.toPx() / 2, width.toPx() / 2),
+                        alpha = 0.5f
+                    )
+                }
+            }
+        }
+    }
+}
 
 @Composable
 private fun SectionLabel(text: String) {

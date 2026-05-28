@@ -38,22 +38,6 @@ import java.time.LocalTime
 import java.time.format.DateTimeFormatter
 import java.time.Duration
 
-// ── Colour helpers ────────────────────────────────────────────────────────────
-
-private fun EventColor.containerColor() = when (this) {
-    EventColor.PURPLE -> Color(0xFFEDECFF)
-    EventColor.TEAL   -> Color(0xFFE0F5EE)
-    EventColor.CORAL  -> Color(0xFFFAECE7)
-    EventColor.AMBER  -> Color(0xFFFAEEDA)
-}
-
-private fun EventColor.accentColor() = when (this) {
-    EventColor.PURPLE -> Color(0xFF6C63FF)
-    EventColor.TEAL   -> Color(0xFF1D9E75)
-    EventColor.CORAL  -> Color(0xFFD85A30)
-    EventColor.AMBER  -> Color(0xFFBA7517)
-}
-
 // ── Screen ────────────────────────────────────────────────────────────────────
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -389,7 +373,7 @@ private fun WeekTimeline(
                                         .height(boxHeight)
                                         .fillMaxWidth()
                                         .clip(RoundedCornerShape(4.dp))
-                                        .background(event.color.accentColor())
+                                        .background(Color(event.color.accentHex))
                                         .border(1.dp, Color.White.copy(alpha = 0.5f), RoundedCornerShape(4.dp))
                                         .clickable { onTap(event) }
                                         .padding(2.dp)
@@ -504,7 +488,7 @@ private fun MonthTimeline(
                                                     .fillMaxWidth()
                                                     .height(4.dp)
                                                     .clip(RoundedCornerShape(1.dp))
-                                                    .background(ev.color.accentColor())
+                                                    .background(Color(ev.color.accentHex))
                                                     .clickable { onTap(ev) }
                                             )
                                         }
@@ -560,8 +544,8 @@ private fun EmptyTimeline(message: String) {
 
 @Composable
 private fun EventCard(event: CalendarEvent, onTap: () -> Unit) {
-    val accent    = event.color.accentColor()
-    val container = event.color.containerColor()
+    val accent    = Color(event.color.accentHex)
+    val container = Color(event.color.containerHex)
 
     Card(
         shape   = RoundedCornerShape(14.dp),

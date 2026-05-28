@@ -33,7 +33,7 @@ class AppMonitorService : Service() {
     private lateinit var calendarRepo: CalendarRepository
     private val handler = Handler(Looper.getMainLooper())
 
-    private var pauseUntil = 0L
+    private var whitelistedPackage: String? = null
     var lastBlockedPackage: String? = null
         private set
     private var overlayVisible = false
@@ -51,8 +51,6 @@ class AppMonitorService : Service() {
     }
 
     private fun poll() {
-        if (System.currentTimeMillis() < pauseUntil) return
-
         // 1. Calendar blocks — always active
         refreshCalendarBlocks()
 
@@ -62,7 +60,11 @@ class AppMonitorService : Service() {
             ?: emptySet()
 
         val allBlocked = calendarBlockedApps + sessionApps
-        if (allBlocked.isEmpty()) { overlayVisible = false; return }
+        if (allBlocked.isEmpty()) { 
+            overlayVisible = false
+            whitelistedPackage = null
+            return 
+        }
 
         val usm = getSystemService(USAGE_STATS_SERVICE) as UsageStatsManager
         val now = System.currentTimeMillis()
@@ -73,20 +75,39 @@ class AppMonitorService : Service() {
             ?.maxByOrNull { it.lastTimeUsed }
             ?.packageName ?: return
 
-        if (foreground == packageName) { overlayVisible = false; return }
+        val isHomeOrSelf = foreground == packageName || isLauncher(foreground)
 
-        if (allBlocked.contains(foreground) && !overlayVisible) {
-            overlayVisible = true
-            lastBlockedPackage = foreground
-            startActivity(
-                Intent(this, BlockingActivity::class.java).apply {
-                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
-                    putExtra(BlockingActivity.EXTRA_BLOCKED_PACKAGE, foreground)
-                }
-            )
-        } else if (!allBlocked.contains(foreground)) {
+        // Handle whitelist logic
+        if (foreground == whitelistedPackage) {
+            overlayVisible = false
+            return
+        }
+
+        // Clear whitelist if user moves away from the whitelisted app
+        if (whitelistedPackage != null && foreground != whitelistedPackage) {
+            whitelistedPackage = null
+        }
+
+        if (allBlocked.contains(foreground) && !isHomeOrSelf) {
+            if (!overlayVisible) {
+                overlayVisible = true
+                lastBlockedPackage = foreground
+                startActivity(
+                    Intent(this, BlockingActivity::class.java).apply {
+                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+                        putExtra(BlockingActivity.EXTRA_BLOCKED_PACKAGE, foreground)
+                    }
+                )
+            }
+        } else {
             overlayVisible = false
         }
+    }
+
+    private fun isLauncher(pkg: String): Boolean {
+        val intent = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME)
+        val resolveInfo = packageManager.resolveActivity(intent, 0)
+        return resolveInfo?.activityInfo?.packageName == pkg
     }
 
     private fun refreshCalendarBlocks() {
@@ -105,8 +126,7 @@ class AppMonitorService : Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
             ACTION_PAUSE -> {
-                val ms = intent.getLongExtra(EXTRA_PAUSE_MS, prefs.gracePeriodMillis)
-                pauseUntil = System.currentTimeMillis() + ms
+                whitelistedPackage = intent.getStringExtra(EXTRA_PAUSE_PACKAGE)
                 overlayVisible = false
             }
             ACTION_STOP -> {
@@ -158,15 +178,15 @@ class AppMonitorService : Service() {
         const val ACTION_PAUSE            = "com.example.timewise.ACTION_PAUSE"
         const val ACTION_STOP             = "com.example.timewise.ACTION_STOP"
         const val ACTION_REFRESH_CALENDAR = "com.example.timewise.ACTION_REFRESH_CALENDAR"
-        const val EXTRA_PAUSE_MS          = "pause_ms"
+        const val EXTRA_PAUSE_PACKAGE     = "pause_package"
 
         @Volatile var instance: AppMonitorService? = null
 
-        fun pause(context: Context, durationMs: Long) {
+        fun pause(context: Context, packageName: String?) {
             context.startService(
                 Intent(context, AppMonitorService::class.java).apply {
                     action = ACTION_PAUSE
-                    putExtra(EXTRA_PAUSE_MS, durationMs)
+                    putExtra(EXTRA_PAUSE_PACKAGE, packageName)
                 }
             )
         }
