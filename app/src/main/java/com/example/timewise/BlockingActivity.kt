@@ -1,7 +1,7 @@
 package com.example.timewise
 
 import android.content.Intent
-import android.graphics.drawable.Drawable
+import androidx.compose.ui.draw.scale
 import android.os.Bundle
 import android.os.CountDownTimer
 import android.os.Handler
@@ -24,6 +24,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -41,14 +42,13 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.core.graphics.drawable.toBitmap
 import com.example.timewise.ui.theme.TimewiseTheme
-import androidx.compose.foundation.layout.fillMaxSize
+import com.example.timewise.R
 
 /**
  * Stays a separate Activity so Android can launch it over foreign apps.
@@ -68,7 +68,6 @@ class BlockingActivity : ComponentActivity() {
             ?: AppMonitorService.instance?.lastBlockedPackage
 
         val appName = resolveAppName(blockedPackage)
-        val appIcon = resolveAppIcon(blockedPackage)
         val message = pickMessage(blockedPackage)
         val delayMs = prefs.delayMillis
 
@@ -76,7 +75,6 @@ class BlockingActivity : ComponentActivity() {
             TimewiseTheme(darkTheme = true) {
                 BlockingScreen(
                     appName = appName,
-                    appIcon = appIcon,
                     message = message,
                     delayMs = delayMs,
                     onResist = { recordAndClose(resisted = true) },
@@ -129,17 +127,6 @@ class BlockingActivity : ComponentActivity() {
             packageManager.getApplicationLabel(info).toString()
         } catch (e: Exception) {
             pkg
-        }
-    }
-
-    private fun resolveAppIcon(pkg: String?): Drawable? {
-        if (pkg == null) return null
-
-        return try {
-            val info = packageManager.getApplicationInfo(pkg, 0)
-            packageManager.getApplicationIcon(info)
-        } catch (e: Exception) {
-            null
         }
     }
 
@@ -198,7 +185,6 @@ class BlockingActivity : ComponentActivity() {
 @Composable
 fun BlockingScreen(
     appName: String,
-    appIcon: Drawable?,
     message: String,
     delayMs: Long,
     onResist: () -> Unit,
@@ -257,34 +243,15 @@ fun BlockingScreen(
                 .fillMaxWidth()
         ) {
             Box(
-                modifier = Modifier.size(72.dp),
+                modifier = Modifier
+                    .size(72.dp)
+                    .background(Color(0xFF6C63FF), shape = CircleShape),
                 contentAlignment = Alignment.Center
             ) {
-                if (appIcon != null) {
-                    Image(
-                        bitmap = appIcon.toBitmap(width = 128, height = 128).asImageBitmap(),
-                        contentDescription = "$appName icon",
-                        modifier = Modifier.fillMaxSize()
-                    )
-
-                    Box(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .background(Color.Black.copy(alpha = 0.25f))
-                    )
-                } else {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .background(Color.Black.copy(alpha = 0.25f))
-                    )
-                }
-
-                Text(
-                    text = "II",
-                    fontSize = 46.sp,
-                    color = Color.White.copy(alpha = 0.95f),
-                    textAlign = TextAlign.Center
+                Image(
+                    painter = painterResource(id = R.mipmap.timewiseicon_foreground),
+                    contentDescription = "Timewise icon",
+                    modifier = Modifier.size(72.dp).scale(1.45f)
                 )
             }
 
