@@ -67,14 +67,12 @@ class BlockingActivity : ComponentActivity() {
         val blockedPackage = intent.getStringExtra(EXTRA_BLOCKED_PACKAGE)
             ?: AppMonitorService.instance?.lastBlockedPackage
 
-        val appName = resolveAppName(blockedPackage)
         val message = pickMessage(blockedPackage)
         val delayMs = prefs.delayMillis
 
         setContent {
             TimewiseTheme(darkTheme = true) {
                 BlockingScreen(
-                    appName = appName,
                     message = message,
                     delayMs = delayMs,
                     onResist = { recordAndClose(resisted = true) },
@@ -117,17 +115,6 @@ class BlockingActivity : ComponentActivity() {
                 startActivity(this)
             }
         }, 300)
-    }
-
-    private fun resolveAppName(pkg: String?): String {
-        if (pkg == null) return "this app"
-
-        return try {
-            val info = packageManager.getApplicationInfo(pkg, 0)
-            packageManager.getApplicationLabel(info).toString()
-        } catch (e: Exception) {
-            pkg
-        }
     }
 
     private fun pickMessage(pkg: String?): String {
@@ -184,7 +171,6 @@ class BlockingActivity : ComponentActivity() {
 
 @Composable
 fun BlockingScreen(
-    appName: String,
     message: String,
     delayMs: Long,
     onResist: () -> Unit,
@@ -255,16 +241,7 @@ fun BlockingScreen(
                 )
             }
 
-            Spacer(Modifier.height(12.dp))
-
-            Text(
-                text = appName,
-                style = MaterialTheme.typography.labelLarge,
-                color = Color(0xFF9B9BA8),
-                textAlign = TextAlign.Center
-            )
-
-            Spacer(Modifier.height(8.dp))
+            Spacer(Modifier.height(16.dp))
 
             Text(
                 text = if (countdownDone) {
