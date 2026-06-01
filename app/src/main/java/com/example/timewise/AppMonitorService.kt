@@ -5,6 +5,7 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.app.Service
+import android.app.usage.UsageEvents
 import android.app.usage.UsageStatsManager
 import android.content.Context
 import android.content.Intent
@@ -34,9 +35,12 @@ class AppMonitorService : Service() {
     private val handler = Handler(Looper.getMainLooper())
 
     private var whitelistedPackage: String? = null
+    private var whitelistedPackageEntered = false
     var lastBlockedPackage: String? = null
         private set
     private var overlayVisible = false
+    private var foregroundPackage: String? = null
+    private var lastUsageEventTime = 0L
 
     private var calendarBlockedApps: Set<String> = emptySet()
 
@@ -60,32 +64,42 @@ class AppMonitorService : Service() {
             ?: emptySet()
 
         val allBlocked = calendarBlockedApps + sessionApps
-        if (allBlocked.isEmpty()) { 
-            overlayVisible = false
-            whitelistedPackage = null
-            return 
-        }
 
         val usm = getSystemService(USAGE_STATS_SERVICE) as UsageStatsManager
         val now = System.currentTimeMillis()
+        val detectedForeground = currentForegroundPackage(usm, now)
 
-        val foreground = usm
-            .queryUsageStats(UsageStatsManager.INTERVAL_DAILY, now - WINDOW_MS, now)
-            ?.filter { it.lastTimeUsed > 0 }
-            ?.maxByOrNull { it.lastTimeUsed }
-            ?.packageName ?: return
+        if (allBlocked.isEmpty()) {
+            overlayVisible = false
+            whitelistedPackage = null
+            return
+        }
 
-        val isHomeOrSelf = foreground == packageName || isLauncher(foreground)
-
-        // Handle whitelist logic
-        if (foreground == whitelistedPackage) {
+        val foreground = detectedForeground ?: run {
+            if (whitelistedPackageEntered) clearWhitelist()
             overlayVisible = false
             return
         }
 
-        // Clear whitelist if user moves away from the whitelisted app
-        if (whitelistedPackage != null && foreground != whitelistedPackage) {
-            whitelistedPackage = null
+        val isHomeOrSelf = foreground == packageName || isLauncher(foreground)
+
+        // "Open anyway" allows the app only for its current foreground visit.
+        // UsageEvents keeps Home transitions from being mistaken for the blocked app.
+        if (whitelistedPackage != null) {
+            when {
+                foreground == whitelistedPackage -> {
+                    whitelistedPackageEntered = true
+                    overlayVisible = false
+                    return
+                }
+                !whitelistedPackageEntered && isHomeOrSelf -> {
+                    overlayVisible = false
+                    return
+                }
+                else -> {
+                    clearWhitelist()
+                }
+            }
         }
 
         if (allBlocked.contains(foreground) && !isHomeOrSelf) {
@@ -102,6 +116,38 @@ class AppMonitorService : Service() {
         } else {
             overlayVisible = false
         }
+    }
+
+    private fun currentForegroundPackage(usm: UsageStatsManager, now: Long): String? {
+        val start = if (lastUsageEventTime > 0L) lastUsageEventTime else now - WINDOW_MS
+        val events = usm.queryEvents(start, now)
+        val event = UsageEvents.Event()
+
+        while (events.hasNextEvent()) {
+            events.getNextEvent(event)
+            lastUsageEventTime = event.timeStamp + 1
+
+            when (event.eventType) {
+                UsageEvents.Event.MOVE_TO_FOREGROUND -> {
+                    foregroundPackage = event.packageName
+                }
+                UsageEvents.Event.MOVE_TO_BACKGROUND -> {
+                    if (foregroundPackage == event.packageName) {
+                        foregroundPackage = null
+                    }
+                    if (whitelistedPackage == event.packageName) {
+                        clearWhitelist()
+                    }
+                }
+            }
+        }
+
+        return foregroundPackage
+    }
+
+    private fun clearWhitelist() {
+        whitelistedPackage = null
+        whitelistedPackageEntered = false
     }
 
     private fun isLauncher(pkg: String): Boolean {
@@ -127,6 +173,7 @@ class AppMonitorService : Service() {
         when (intent?.action) {
             ACTION_PAUSE -> {
                 whitelistedPackage = intent.getStringExtra(EXTRA_PAUSE_PACKAGE)
+                whitelistedPackageEntered = false
                 overlayVisible = false
             }
             ACTION_STOP -> {
