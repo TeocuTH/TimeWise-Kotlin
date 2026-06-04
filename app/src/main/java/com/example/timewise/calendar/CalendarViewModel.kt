@@ -64,6 +64,24 @@ class CalendarViewModel(app: Application) : AndroidViewModel(app) {
     fun previousDay() = selectDate(_uiState.value.selectedDate.minusDays(1))
     fun nextDay()     = selectDate(_uiState.value.selectedDate.plusDays(1))
 
+    fun previousPeriod() {
+        val state = _uiState.value
+        when (state.viewMode) {
+            CalendarView.DAY -> selectDate(state.selectedDate.minusDays(1))
+            CalendarView.WEEK -> selectDate(state.selectedDate.minusWeeks(1))
+            CalendarView.MONTH -> selectDate(state.selectedDate.minusMonths(1))
+        }
+    }
+
+    fun nextPeriod() {
+        val state = _uiState.value
+        when (state.viewMode) {
+            CalendarView.DAY -> selectDate(state.selectedDate.plusDays(1))
+            CalendarView.WEEK -> selectDate(state.selectedDate.plusWeeks(1))
+            CalendarView.MONTH -> selectDate(state.selectedDate.plusMonths(1))
+        }
+    }
+
     fun setViewMode(mode: CalendarView) {
         _uiState.update { it.copy(viewMode = mode) }
         loadEventsForMode(mode, _uiState.value.selectedDate)

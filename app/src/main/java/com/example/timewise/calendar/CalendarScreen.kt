@@ -3,19 +3,17 @@ package com.example.timewise.calendar
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.foundation.background
-import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.foundation.*
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.scrollBy
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
@@ -87,41 +85,48 @@ fun CalendarScreen(vm: CalendarViewModel = viewModel()) {
             DateHeader(
                 date       = state.selectedDate,
                 viewMode   = state.viewMode,
-                onPrevious = {
-                    when (state.viewMode) {
-                        CalendarView.DAY -> vm.previousDay()
-                        CalendarView.WEEK -> vm.selectDate(state.selectedDate.minusWeeks(1))
-                        CalendarView.MONTH -> vm.selectDate(state.selectedDate.minusMonths(1))
-                    }
-                },
-                onNext     = {
-                    when (state.viewMode) {
-                        CalendarView.DAY -> vm.nextDay()
-                        CalendarView.WEEK -> vm.selectDate(state.selectedDate.plusWeeks(1))
-                        CalendarView.MONTH -> vm.selectDate(state.selectedDate.plusMonths(1))
-                    }
-                },
+                onPrevious = vm::previousPeriod,
+                onNext     = vm::nextPeriod,
             )
 
             HorizontalDivider()
 
-            if (state.loading) {
-                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator()
-                }
-            } else {
-                when (state.viewMode) {
-                    CalendarView.DAY -> DayTimeline(events = state.events, onTap = vm::openSheetForEdit)
-                    CalendarView.WEEK -> WeekTimeline(
-                        events = state.events,
-                        selectedDate = state.selectedDate,
-                        onTap = vm::openSheetForEdit
-                    )
-                    CalendarView.MONTH -> MonthTimeline(
-                        events = state.events,
-                        selectedDate = state.selectedDate,
-                        onTap = vm::openSheetForEdit
-                    )
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .pointerInput(state.viewMode, state.selectedDate) {
+                        var totalDrag = 0f
+                        detectHorizontalDragGestures(
+                            onDragEnd = {
+                                if (totalDrag > 100) vm.previousPeriod()
+                                else if (totalDrag < -100) vm.nextPeriod()
+                                totalDrag = 0f
+                            },
+                            onHorizontalDrag = { change, dragAmount ->
+                                change.consume()
+                                totalDrag += dragAmount
+                            }
+                        )
+                    }
+            ) {
+                if (state.loading) {
+                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        CircularProgressIndicator()
+                    }
+                } else {
+                    when (state.viewMode) {
+                        CalendarView.DAY -> DayTimeline(events = state.events, onTap = vm::openSheetForEdit)
+                        CalendarView.WEEK -> WeekTimeline(
+                            events = state.events,
+                            selectedDate = state.selectedDate,
+                            onTap = vm::openSheetForEdit
+                        )
+                        CalendarView.MONTH -> MonthTimeline(
+                            events = state.events,
+                            selectedDate = state.selectedDate,
+                            onTap = vm::openSheetForEdit
+                        )
+                    }
                 }
             }
         }

@@ -202,12 +202,16 @@ private fun PermissionSetupDialog(
                             android.R.anim.fade_in,
                             android.R.anim.fade_out
                         ).toBundle()
-                        context.startActivity(
-                            Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS).apply {
-                                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                            },
-                            options
-                        )
+                        val intent = Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS).apply {
+                            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                            data = Uri.parse("package:" + context.packageName)
+                        }
+                        try {
+                            context.startActivity(intent, options)
+                        } catch (e: Exception) {
+                            intent.data = null
+                            context.startActivity(intent, options)
+                        }
                         pollAndReturn(context) { hasUsagePermission(context) }
                     }
                 )
