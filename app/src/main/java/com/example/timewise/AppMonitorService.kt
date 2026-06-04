@@ -76,7 +76,7 @@ class AppMonitorService : Service() {
         }
 
         val foreground = detectedForeground ?: run {
-            if (whitelistedPackageEntered) clearWhitelist()
+            // We don't clear the whitelist just because foreground is null (poll interval gap)
             overlayVisible = false
             return
         }
@@ -129,14 +129,19 @@ class AppMonitorService : Service() {
 
             when (event.eventType) {
                 UsageEvents.Event.MOVE_TO_FOREGROUND -> {
-                    foregroundPackage = event.packageName
+                    val newPkg = event.packageName
+                    // If a NEW package comes to foreground that isn't the current whitelisted one,
+                    // and isn't a "transitional" package (launcher/self), clear the whitelist.
+                    if (whitelistedPackage != null && whitelistedPackageEntered) {
+                        if (newPkg != whitelistedPackage && !isLauncher(newPkg) && newPkg != packageName) {
+                            clearWhitelist()
+                        }
+                    }
+                    foregroundPackage = newPkg
                 }
                 UsageEvents.Event.MOVE_TO_BACKGROUND -> {
                     if (foregroundPackage == event.packageName) {
                         foregroundPackage = null
-                    }
-                    if (whitelistedPackage == event.packageName) {
-                        clearWhitelist()
                     }
                 }
             }

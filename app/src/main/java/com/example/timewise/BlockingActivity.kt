@@ -90,6 +90,18 @@ class BlockingActivity : ComponentActivity() {
         recordAndClose(resisted = true)
     }
 
+    override fun onStop() {
+        super.onStop()
+        // If the activity is being stopped and it's not due to a rotation
+        // or an explicit finish() call (from the buttons), it means the user
+        // left the overlay (Home button, app switcher, or notification).
+        if (!isChangingConfigurations && !isFinishing) {
+            // Count this as a "resisted" attempt since they left the blocked app.
+            prefs.recordInterception(resisted = true)
+            finish()
+        }
+    }
+
     private fun recordAndClose(resisted: Boolean) {
         prefs.recordInterception(resisted)
 
