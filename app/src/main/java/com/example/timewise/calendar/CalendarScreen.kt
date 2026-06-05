@@ -1,17 +1,9 @@
 package com.example.timewise.calendar
 
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.*
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -115,7 +107,11 @@ fun CalendarScreen(vm: CalendarViewModel = viewModel()) {
                     }
                 } else {
                     when (state.viewMode) {
-                        CalendarView.DAY -> DayTimeline(events = state.events, onTap = vm::openSheetForEdit)
+                        CalendarView.DAY -> DayTimeline(
+                            events = state.events,
+                            selectedDate = state.selectedDate,
+                            onTap = vm::openSheetForEdit
+                        )
                         CalendarView.WEEK -> WeekTimeline(
                             events = state.events,
                             selectedDate = state.selectedDate,
@@ -225,42 +221,156 @@ private fun DateHeader(
 @Composable
 private fun DayTimeline(
     events: List<CalendarEvent>,
+    selectedDate: LocalDate,
     onTap: (CalendarEvent) -> Unit,
 ) {
-    if (events.isEmpty()) {
-        Box(
-            modifier            = Modifier.fillMaxSize(),
-            contentAlignment    = Alignment.Center,
-        ) {
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Icon(
-                    imageVector = Icons.Outlined.CalendarToday,
-                    contentDescription = null,
-                    modifier    = Modifier.size(48.dp),
-                    tint        = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f),
-                )
-                Spacer(Modifier.height(12.dp))
-                Text(
-                    text  = "No events today",
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                Text(
-                    text  = "Tap + to add one",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
-                )
+    val timeWidth = 56.dp
+    val hourHeight = 64.dp
+    val totalHeight = hourHeight * 24
+    val scrollState = rememberScrollState()
+    val isToday = selectedDate == LocalDate.now()
+
+    var currentTime by remember { mutableStateOf(LocalTime.now()) }
+    if (isToday) {
+        LaunchedEffect(Unit) {
+            while (true) {
+                currentTime = LocalTime.now()
+                kotlinx.coroutines.delay(60000) // Update every minute
             }
         }
-        return
     }
 
-    LazyColumn(
-        contentPadding      = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
+    val density = LocalDensity.current
+    LaunchedEffect(selectedDate) {
+        val targetHour = if (isToday) (LocalTime.now().hour - 1).coerceAtLeast(0) else 7
+        scrollState.scrollTo(with(density) { (targetHour * hourHeight.value).dp.roundToPx() })
+    }
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(scrollState)
     ) {
-        items(events, key = { it.id }) { event ->
-            EventCard(event = event, onTap = { onTap(event) })
+        // 1. Grid Background (Horizontal lines & Time labels)
+        Column(modifier = Modifier.fillMaxWidth().height(totalHeight)) {
+            for (h in 0..23) {
+                Row(modifier = Modifier.height(hourHeight).fillMaxWidth()) {
+                    Box(
+                        modifier = Modifier.width(timeWidth).fillMaxHeight(),
+                        contentAlignment = Alignment.TopCenter
+                    ) {
+                        if (h > 0) {
+                            Text(
+                                text = "%02d:00".format(h),
+                                style = MaterialTheme.typography.labelSmall,
+                                fontSize = 11.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                                modifier = Modifier.padding(top = 2.dp)
+                            )
+                        }
+                    }
+                    Box(modifier = Modifier.weight(1f).fillMaxHeight()) {
+                        HorizontalDivider(
+                            modifier = Modifier.align(Alignment.TopStart),
+                            thickness = 0.5.dp,
+                            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.2f)
+                        )
+                    }
+                }
+            }
+        }
+
+        // 2. Events Layer
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(totalHeight)
+                .padding(start = timeWidth, end = 8.dp)
+        ) {
+            events.forEach { event ->
+                val start = runCatching { LocalTime.parse(event.startTime) }.getOrNull()
+                val end = runCatching { LocalTime.parse(event.endTime) }.getOrNull()
+
+                if (start != null && end != null) {
+                    val startMinutes = start.hour * 60 + start.minute
+                    val endMinutes = end.hour * 60 + end.minute
+                    val duration = (endMinutes - startMinutes).coerceAtLeast(20)
+
+                    val topOffset = (startMinutes * hourHeight.value / 60).dp
+                    val boxHeight = (duration * hourHeight.value / 60).dp
+
+                    DayEventItem(
+                        event = event,
+                        modifier = Modifier
+                            .offset(y = topOffset)
+                            .height(boxHeight)
+                            .fillMaxWidth(),
+                        onTap = { onTap(event) }
+                    )
+                }
+            }
+
+            // 3. Current Time Indicator
+            if (isToday) {
+                val nowMinutes = currentTime.hour * 60 + currentTime.minute
+                val nowOffset = (nowMinutes * hourHeight.value / 60).dp
+
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .offset(y = nowOffset - 5.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(10.dp)
+                            .background(Color.Black, CircleShape)
+                    )
+                    HorizontalDivider(
+                        modifier = Modifier.weight(1f),
+                        thickness = 2.dp,
+                        color = Color.Black
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun DayEventItem(
+    event: CalendarEvent,
+    modifier: Modifier = Modifier,
+    onTap: () -> Unit
+) {
+    val accent = Color(event.color.accentHex)
+
+    Box(
+        modifier = modifier
+            .padding(horizontal = 2.dp, vertical = 1.dp)
+            .clip(RoundedCornerShape(8.dp))
+            .background(accent)
+            .clickable { onTap() }
+            .padding(8.dp)
+    ) {
+        Column {
+            Text(
+                text = event.title.ifBlank { "Untitled" },
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = FontWeight.Bold,
+                color = Color.White,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            if (event.description.isNotBlank()) {
+                Text(
+                    text = event.description,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = Color.White.copy(alpha = 0.8f),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
         }
     }
 }
@@ -276,6 +386,23 @@ private fun WeekTimeline(
     val hourHeight = 64.dp
     val totalHeight = hourHeight * 24
     val scrollState = rememberScrollState()
+
+    var currentTime by remember { mutableStateOf(LocalTime.now()) }
+    LaunchedEffect(Unit) {
+        while (true) {
+            currentTime = LocalTime.now()
+            kotlinx.coroutines.delay(60000)
+        }
+    }
+
+    val density = LocalDensity.current
+    LaunchedEffect(selectedDate) {
+        val endOfWeek = startOfWeek.plusDays(6)
+        val today = LocalDate.now()
+        val isThisWeek = !today.isBefore(startOfWeek) && !today.isAfter(endOfWeek)
+        val targetHour = if (isThisWeek) (LocalTime.now().hour - 1).coerceAtLeast(0) else 7
+        scrollState.scrollTo(with(density) { (targetHour * hourHeight.value).dp.roundToPx() })
+    }
 
     Column(modifier = Modifier.fillMaxSize()) {
         // Header (Day names)
@@ -381,7 +508,7 @@ private fun WeekTimeline(
                                         .background(Color(event.color.accentHex))
                                         .border(1.dp, Color.White.copy(alpha = 0.5f), RoundedCornerShape(4.dp))
                                         .clickable { onTap(event) }
-                                        .padding(2.dp)
+                                        .padding(horizontal = 5.dp, vertical = 2.dp)
                                 ) {
                                     if (boxHeight > 16.dp) {
                                         Text(
@@ -395,6 +522,30 @@ private fun WeekTimeline(
                                         )
                                     }
                                 }
+                            }
+                        }
+
+                        // Current Time Indicator
+                        if (date == LocalDate.now()) {
+                            val nowMinutes = currentTime.hour * 60 + currentTime.minute
+                            val nowOffset = (nowMinutes * hourHeight.value / 60).dp
+
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .offset(y = nowOffset - 4.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(8.dp)
+                                        .background(Color.Black, CircleShape)
+                                )
+                                HorizontalDivider(
+                                    modifier = Modifier.weight(1f),
+                                    thickness = 1.5.dp,
+                                    color = Color.Black
+                                )
                             }
                         }
                     }
@@ -517,124 +668,4 @@ private fun MonthTimeline(
     }
 }
 
-@Composable
-private fun EmptyTimeline(message: String) {
-    Box(
-        modifier            = Modifier.fillMaxSize(),
-        contentAlignment    = Alignment.Center,
-    ) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Icon(
-                imageVector = Icons.Outlined.CalendarToday,
-                contentDescription = null,
-                modifier    = Modifier.size(48.dp),
-                tint        = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f),
-            )
-            Spacer(Modifier.height(12.dp))
-            Text(
-                text  = message,
-                style = MaterialTheme.typography.bodyLarge,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            Text(
-                text  = "Tap + to add one",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
-            )
-        }
-    }
-}
 
-// ── Event card ────────────────────────────────────────────────────────────────
-
-@Composable
-private fun EventCard(event: CalendarEvent, onTap: () -> Unit) {
-    val accent    = Color(event.color.accentHex)
-    val container = Color(event.color.containerHex)
-
-    Card(
-        shape   = RoundedCornerShape(14.dp),
-        colors  = CardDefaults.cardColors(containerColor = container),
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onTap),
-        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
-    ) {
-        Row(modifier = Modifier.fillMaxWidth()) {
-            // Left accent stripe
-            Box(
-                modifier = Modifier
-                    .width(4.dp)
-                    .fillMaxHeight()
-                    .background(accent, RoundedCornerShape(topStart = 14.dp, bottomStart = 14.dp))
-            )
-
-            Column(
-                modifier = Modifier
-                    .weight(1f)
-                    .padding(horizontal = 14.dp, vertical = 12.dp),
-            ) {
-                // Time range
-                Text(
-                    text  = "${event.startTime} – ${event.endTime}",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = accent,
-                    fontWeight = FontWeight.SemiBold,
-                )
-
-                Spacer(Modifier.height(2.dp))
-
-                // Title
-                Text(
-                    text       = event.title.ifBlank { "Untitled event" },
-                    style      = MaterialTheme.typography.bodyLarge,
-                    fontWeight = FontWeight.Medium,
-                    maxLines   = 1,
-                    overflow   = TextOverflow.Ellipsis,
-                )
-
-                // Description
-                if (event.description.isNotBlank()) {
-                    Text(
-                        text     = event.description,
-                        style    = MaterialTheme.typography.bodySmall,
-                        color    = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                }
-
-                // Blocked apps badge
-                if (event.blockedApps.isNotEmpty()) {
-                    Spacer(Modifier.height(6.dp))
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(4.dp),
-                    ) {
-                        Icon(
-                            imageVector        = Icons.Outlined.Block,
-                            contentDescription = null,
-                            modifier           = Modifier.size(13.dp),
-                            tint               = accent,
-                        )
-                        Text(
-                            text  = "${event.blockedApps.size} app${if (event.blockedApps.size > 1) "s" else ""} blocked",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = accent,
-                        )
-                    }
-                }
-            }
-
-            // Edit chevron
-            Icon(
-                imageVector        = Icons.Outlined.ChevronRight,
-                contentDescription = "Edit",
-                tint               = accent.copy(alpha = 0.5f),
-                modifier           = Modifier
-                    .align(Alignment.CenterVertically)
-                    .padding(end = 12.dp),
-            )
-        }
-    }
-}
