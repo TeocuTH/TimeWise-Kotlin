@@ -15,6 +15,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.time.LocalDate
+import java.time.LocalTime
 import java.time.format.DateTimeFormatter
 import java.util.UUID
 
@@ -45,6 +46,7 @@ class CalendarViewModel(app: Application) : AndroidViewModel(app) {
     private val repo = CalendarRepository(app)
     private val statsRepo = StatsRepository(app)
     private val dateFmt = DateTimeFormatter.ofPattern("yyyy-MM-dd")
+    private val timeFmt = DateTimeFormatter.ofPattern("HH:mm")
 
     private val _uiState = MutableStateFlow(CalendarUiState())
     val uiState: StateFlow<CalendarUiState> = _uiState.asStateFlow()
@@ -63,6 +65,24 @@ class CalendarViewModel(app: Application) : AndroidViewModel(app) {
 
     fun previousDay() = selectDate(_uiState.value.selectedDate.minusDays(1))
     fun nextDay()     = selectDate(_uiState.value.selectedDate.plusDays(1))
+
+    fun previousPeriod() {
+        val state = _uiState.value
+        when (state.viewMode) {
+            CalendarView.DAY -> selectDate(state.selectedDate.minusDays(1))
+            CalendarView.WEEK -> selectDate(state.selectedDate.minusWeeks(1))
+            CalendarView.MONTH -> selectDate(state.selectedDate.minusMonths(1))
+        }
+    }
+
+    fun nextPeriod() {
+        val state = _uiState.value
+        when (state.viewMode) {
+            CalendarView.DAY -> selectDate(state.selectedDate.plusDays(1))
+            CalendarView.WEEK -> selectDate(state.selectedDate.plusWeeks(1))
+            CalendarView.MONTH -> selectDate(state.selectedDate.plusMonths(1))
+        }
+    }
 
     fun setViewMode(mode: CalendarView) {
         _uiState.update { it.copy(viewMode = mode) }
@@ -84,17 +104,19 @@ class CalendarViewModel(app: Application) : AndroidViewModel(app) {
                         val start = date.minusDays(date.dayOfWeek.value.toLong() - 1)
                         val end = start.plusDays(6)
                         repo.loadAll().filter {
-                            val d = LocalDate.parse(it.date, dateFmt)
-                            !d.isBefore(start) && !d.isAfter(end)
-                        }.sortedWith(compareBy({ it.date }, { it.startTime }))
+                            val eventStart = LocalDate.parse(it.startDate, dateFmt)
+                            val eventEnd = LocalDate.parse(it.endDate, dateFmt)
+                            !eventStart.isAfter(end) && !eventEnd.isBefore(start)
+                        }.sortedWith(compareBy({ it.startDate }, { it.startTime }))
                     }
                     CalendarView.MONTH -> {
                         val start = date.withDayOfMonth(1)
                         val end = date.withDayOfMonth(date.lengthOfMonth())
                         repo.loadAll().filter {
-                            val d = LocalDate.parse(it.date, dateFmt)
-                            !d.isBefore(start) && !d.isAfter(end)
-                        }.sortedWith(compareBy({ it.date }, { it.startTime }))
+                            val eventStart = LocalDate.parse(it.startDate, dateFmt)
+                            val eventEnd = LocalDate.parse(it.endDate, dateFmt)
+                            !eventStart.isAfter(end) && !eventEnd.isBefore(start)
+                        }.sortedWith(compareBy({ it.startDate }, { it.startTime }))
                     }
                 }
             }
@@ -196,19 +218,24 @@ class CalendarViewModel(app: Application) : AndroidViewModel(app) {
                     icon        = info.loadIcon(pm),
                 )
             }
+            .filter { it.packageName != ctx.packageName }
             .sortedBy { it.appName.lowercase() }
     }
 
     // ── New event factory ─────────────────────────────────────────────────────
 
-    fun newEventForDate(date: LocalDate): CalendarEvent = CalendarEvent(
-        id          = UUID.randomUUID().toString(),
-        title       = "",
-        description = "",
-        date        = date.format(dateFmt),
-        startTime   = "09:00",
-        endTime     = "10:00",
-        blockedApps = emptyList(),
-        color       = EventColor.PURPLE,
-    )
+    fun newEventForDate(date: LocalDate): CalendarEvent {
+        val now = LocalTime.now().withSecond(0).withNano(0)
+        return CalendarEvent(
+            id          = UUID.randomUUID().toString(),
+            title       = "",
+            description = "",
+            startDate   = date.format(dateFmt),
+            endDate     = date.format(dateFmt),
+            startTime   = now.format(timeFmt),
+            endTime     = now.plusHours(1).format(timeFmt),
+            blockedApps = emptyList(),
+            color       = EventColor.PURPLE,
+        )
+    }
 }
