@@ -15,6 +15,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.time.LocalDate
+import java.time.LocalTime
 import java.time.format.DateTimeFormatter
 import java.util.UUID
 
@@ -36,6 +37,7 @@ data class CalendarUiState(
     val loading: Boolean               = true,
     // Add/edit sheet state
     val showSheet: Boolean             = false,
+    val isEditing: Boolean             = false,
     val editingEvent: CalendarEvent?   = null,
     val viewMode: CalendarView         = CalendarView.DAY
 )
@@ -147,16 +149,25 @@ class CalendarViewModel(app: Application) : AndroidViewModel(app) {
 
     // ── Sheet ─────────────────────────────────────────────────────────────────
 
-    fun openSheetForNew() {
-        _uiState.update { it.copy(showSheet = true, editingEvent = null) }
+    fun openSheetForNew(date: LocalDate = _uiState.value.selectedDate, startTime: String = "09:00") {
+        val endTime = try {
+            val start = LocalTime.parse(startTime)
+            start.plusHours(1).format(DateTimeFormatter.ofPattern("HH:mm"))
+        } catch (e: Exception) { "10:00" }
+
+        val newEvent = newEventForDate(date).copy(
+            startTime = startTime,
+            endTime = endTime
+        )
+        _uiState.update { it.copy(showSheet = true, isEditing = false, editingEvent = newEvent) }
     }
 
     fun openSheetForEdit(event: CalendarEvent) {
-        _uiState.update { it.copy(showSheet = true, editingEvent = event) }
+        _uiState.update { it.copy(showSheet = true, isEditing = true, editingEvent = event) }
     }
 
     fun closeSheet() {
-        _uiState.update { it.copy(showSheet = false, editingEvent = null) }
+        _uiState.update { it.copy(showSheet = false, isEditing = false, editingEvent = null) }
     }
 
     // ── Installed apps ────────────────────────────────────────────────────────

@@ -3,10 +3,8 @@ package com.example.timewise.calendar
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.*
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.layout.*
@@ -48,7 +46,7 @@ fun CalendarScreen(vm: CalendarViewModel = viewModel()) {
             initial      = state.editingEvent ?: vm.newEventForDate(state.selectedDate),
             installedApps = state.installedApps,
             suggestedApps = state.suggestedApps,
-            isEditing    = state.editingEvent != null,
+            isEditing    = state.isEditing,
             onSave       = vm::saveEvent,
             onDelete     = { vm.deleteEvent(it) },
             onDismiss    = vm::closeSheet,
@@ -69,7 +67,7 @@ fun CalendarScreen(vm: CalendarViewModel = viewModel()) {
         },
         floatingActionButton = {
             FloatingActionButton(
-                onClick            = vm::openSheetForNew,
+                onClick            = { vm.openSheetForNew() },
                 containerColor     = MaterialTheme.colorScheme.primary,
             ) {
                 Icon(Icons.Outlined.Add, contentDescription = "Add event")
@@ -119,7 +117,9 @@ fun CalendarScreen(vm: CalendarViewModel = viewModel()) {
                         CalendarView.WEEK -> WeekTimeline(
                             events = state.events,
                             selectedDate = state.selectedDate,
-                            onTap = vm::openSheetForEdit
+                            onTap = vm::openSheetForEdit,
+                            onSlotTap = { d, t -> vm.openSheetForNew(d, t) },
+                            ghostEvent = if (!state.isEditing) state.editingEvent else null
                         )
                         CalendarView.MONTH -> MonthTimeline(
                             events = state.events,
@@ -270,6 +270,8 @@ private fun WeekTimeline(
     events: List<CalendarEvent>,
     selectedDate: LocalDate,
     onTap: (CalendarEvent) -> Unit,
+    onSlotTap: (LocalDate, String) -> Unit,
+    ghostEvent: CalendarEvent? = null,
 ) {
     val startOfWeek = selectedDate.minusDays(selectedDate.dayOfWeek.value.toLong() - 1)
     val timeWidth = 40.dp
@@ -311,16 +313,40 @@ private fun WeekTimeline(
                 .fillMaxSize()
                 .verticalScroll(scrollState)
         ) {
-            // 1. Grid Background (Vertical lines)
+            // 1. Grid Background (Vertical lines + clickable slots)
             Row(modifier = Modifier.fillMaxWidth().height(totalHeight)) {
                 Spacer(modifier = Modifier.width(timeWidth))
                 for (i in 0..6) {
-                    Spacer(
+                    val date = startOfWeek.plusDays(i.toLong())
+                    Column(
                         modifier = Modifier
                             .weight(1f)
                             .fillMaxHeight()
                             .border(0.25.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.2f))
-                    )
+                    ) {
+                        for (h in 0..23) {
+                            // Top half: HH:00
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(hourHeight / 2)
+                                    .clickable(
+                                        interactionSource = remember { MutableInteractionSource() },
+                                        indication = null
+                                    ) { onSlotTap(date, "%02d:00".format(h)) }
+                            )
+                            // Bottom half (near border): HH:30
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(hourHeight / 2)
+                                    .clickable(
+                                        interactionSource = remember { MutableInteractionSource() },
+                                        indication = null
+                                    ) { onSlotTap(date, "%02d:30".format(h)) }
+                            )
+                        }
+                    }
                 }
             }
 
@@ -381,7 +407,7 @@ private fun WeekTimeline(
                                         .background(Color(event.color.accentHex))
                                         .border(1.dp, Color.White.copy(alpha = 0.5f), RoundedCornerShape(4.dp))
                                         .clickable { onTap(event) }
-                                        .padding(2.dp)
+                                    .padding(2.dp)
                                 ) {
                                     if (boxHeight > 16.dp) {
                                         Text(
@@ -394,6 +420,47 @@ private fun WeekTimeline(
                                             overflow = TextOverflow.Ellipsis
                                         )
                                     }
+                                }
+                            }
+                        }
+
+                        // ── Ghost Event Layer ──
+                        if (ghostEvent != null && ghostEvent.date == dateStr) {
+                            val start = runCatching { LocalTime.parse(ghostEvent.startTime) }.getOrNull()
+                            val end = runCatching { LocalTime.parse(ghostEvent.endTime) }.getOrNull()
+
+                            if (start != null && end != null) {
+                                val startMin = start.hour * 60 + start.minute
+                                val endMin = end.hour * 60 + end.minute
+                                val topOff = (startMin * hourHeight.value / 60).dp
+                                val bHeight = ((endMin - startMin) * hourHeight.value / 60).dp
+
+                                Box(
+                                    modifier = Modifier
+                                        .padding(horizontal = 2.dp)
+                                        .offset(y = topOff)
+                                        .height(bHeight)
+                                        .fillMaxWidth()
+                                        .border(2.dp, Color(0xFF6C63FF), RoundedCornerShape(6.dp))
+                                        .background(Color(0xFF6C63FF).copy(alpha = 0.1f), RoundedCornerShape(6.dp))
+                                ) {
+                                    // Corner "handles" to match the visual style
+                                    Box(
+                                        Modifier
+                                            .size(8.dp)
+                                            .align(Alignment.TopStart)
+                                            .offset(x = (-2).dp, y = (-2).dp)
+                                            .background(Color.White, CircleShape)
+                                            .border(1.dp, Color(0xFF6C63FF), CircleShape)
+                                    )
+                                    Box(
+                                        Modifier
+                                            .size(8.dp)
+                                            .align(Alignment.BottomEnd)
+                                            .offset(x = 2.dp, y = 2.dp)
+                                            .background(Color.White, CircleShape)
+                                            .border(1.dp, Color(0xFF6C63FF), CircleShape)
+                                    )
                                 }
                             }
                         }
