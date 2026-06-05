@@ -251,6 +251,7 @@ private fun PermissionSetupDialog(
                                         Uri.parse("package:" + context.packageName)
                                     )
                                 )
+                                pollAndReturn(context) { hasBatteryOptimizationExemption(context) }
                             } catch (e: Exception) {
                                 val options = ActivityOptions.makeCustomAnimation(
                                     context,

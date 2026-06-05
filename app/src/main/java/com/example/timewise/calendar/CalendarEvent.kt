@@ -11,8 +11,10 @@ data class CalendarEvent(
     val id: String,
     val title: String,
     val description: String,
-    /** Date as "yyyy-MM-dd" */
-    val date: String,
+    /** Start date as "yyyy-MM-dd" */
+    val startDate: String,
+    /** End date as "yyyy-MM-dd" */
+    val endDate: String,
     /** Start time as "HH:mm" (24h) */
     val startTime: String,
     /** End time as "HH:mm" (24h) */
@@ -25,7 +27,8 @@ data class CalendarEvent(
         put("id", id)
         put("title", title)
         put("description", description)
-        put("date", date)
+        put("startDate", startDate)
+        put("endDate", endDate)
         put("startTime", startTime)
         put("endTime", endTime)
         put("blockedApps", JSONArray(blockedApps))
@@ -37,7 +40,8 @@ data class CalendarEvent(
             id          = obj.getString("id"),
             title       = obj.getString("title"),
             description = obj.optString("description", ""),
-            date        = obj.getString("date"),
+            startDate   = obj.optString("startDate", obj.optString("date")), // Fallback for old data
+            endDate     = obj.optString("endDate", obj.optString("date")),
             startTime   = obj.getString("startTime"),
             endTime     = obj.getString("endTime"),
             blockedApps = buildList {

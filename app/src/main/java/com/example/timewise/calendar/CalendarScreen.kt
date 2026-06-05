@@ -321,13 +321,18 @@ private fun DayTimeline(
                 .height(totalHeight)
                 .padding(start = timeWidth, end = 8.dp)
         ) {
+            val dateStr = selectedDate.toString()
             events.forEach { event ->
-                val start = runCatching { LocalTime.parse(event.startTime) }.getOrNull()
-                val end = runCatching { LocalTime.parse(event.endTime) }.getOrNull()
+                val start = runCatching {
+                    if (event.startDate == dateStr) LocalTime.parse(event.startTime) else LocalTime.MIDNIGHT
+                }.getOrNull()
+                val end = runCatching {
+                    if (event.endDate == dateStr) LocalTime.parse(event.endTime) else LocalTime.MAX
+                }.getOrNull()
 
                 if (start != null && end != null) {
                     val startMinutes = start.hour * 60 + start.minute
-                    val endMinutes = end.hour * 60 + end.minute
+                    val endMinutes = if (end == LocalTime.MAX) 24 * 60 else end.hour * 60 + end.minute
                     val duration = (endMinutes - startMinutes).coerceAtLeast(20)
 
                     val topOffset = (startMinutes * hourHeight.value / 60).dp
@@ -345,7 +350,7 @@ private fun DayTimeline(
             }
 
             // Ghost Event Layer
-            if (ghostEvent != null && ghostEvent.date == selectedDate.toString()) {
+            if (ghostEvent != null && ghostEvent.startDate == selectedDate.toString()) {
                 val start = runCatching { LocalTime.parse(ghostEvent.startTime) }.getOrNull()
                 val end = runCatching { LocalTime.parse(ghostEvent.endTime) }.getOrNull()
 
@@ -582,17 +587,21 @@ private fun WeekTimeline(
                 Spacer(modifier = Modifier.width(timeWidth))
                 for (i in 0..6) {
                     val date = startOfWeek.plusDays(i.toLong())
-                    val dateStr = date.format(DateTimeFormatter.ofPattern("yyyy-MM-dd"))
-                    val dayEvents = events.filter { it.date == dateStr }
+                    val dateStr = date.toString()
+                    val dayEvents = events.filter { dateStr >= it.startDate && dateStr <= it.endDate }
 
                     Box(modifier = Modifier.weight(1f).fillMaxHeight()) {
                         dayEvents.forEach { event ->
-                            val start = runCatching { LocalTime.parse(event.startTime) }.getOrNull()
-                            val end = runCatching { LocalTime.parse(event.endTime) }.getOrNull()
+                            val start = runCatching {
+                                if (event.startDate == dateStr) LocalTime.parse(event.startTime) else LocalTime.MIDNIGHT
+                            }.getOrNull()
+                            val end = runCatching {
+                                if (event.endDate == dateStr) LocalTime.parse(event.endTime) else LocalTime.MAX
+                            }.getOrNull()
                             
                             if (start != null && end != null) {
                                 val startMinutes = start.hour * 60 + start.minute
-                                val endMinutes = end.hour * 60 + end.minute
+                                val endMinutes = if (end == LocalTime.MAX) 24 * 60 else end.hour * 60 + end.minute
                                 val duration = (endMinutes - startMinutes).coerceAtLeast(20)
 
                                 val topOffset = (startMinutes * hourHeight.value / 60).dp
@@ -626,7 +635,7 @@ private fun WeekTimeline(
                         }
 
                         // ── Ghost Event Layer ──
-                        if (ghostEvent != null && ghostEvent.date == dateStr) {
+                        if (ghostEvent != null && ghostEvent.startDate == dateStr) {
                             val start = runCatching { LocalTime.parse(ghostEvent.startTime) }.getOrNull()
                             val end = runCatching { LocalTime.parse(ghostEvent.endTime) }.getOrNull()
 
@@ -762,8 +771,8 @@ private fun MonthTimeline(
                         ) {
                             if (dayNum != null) {
                                 val date = selectedDate.withDayOfMonth(dayNum)
-                                val dateStr = date.format(dateFmt)
-                                val dayEvents = events.filter { it.date == dateStr }
+                                val dateStr = date.toString()
+                                val dayEvents = events.filter { dateStr >= it.startDate && dateStr <= it.endDate }
                                 val isToday = date == LocalDate.now()
 
                                 Column(

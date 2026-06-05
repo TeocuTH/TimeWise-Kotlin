@@ -43,10 +43,29 @@ private val TealLight  = Color(0xFFE1F5EE)
 @Composable
 fun StatsScreen(vm: StatsViewModel = viewModel()) {
     val state by vm.uiState.collectAsState()
+    val context = LocalContext.current
 
     // Refresh data whenever the screen becomes visible
     LaunchedEffect(Unit) {
         vm.load()
+    }
+
+    // Refresh data if an app is installed or uninstalled (re-installation)
+    DisposableEffect(context) {
+        val receiver = object : android.content.BroadcastReceiver() {
+            override fun onReceive(context: android.content.Context?, intent: android.content.Intent?) {
+                vm.load()
+            }
+        }
+        val filter = android.content.IntentFilter().apply {
+            addAction(android.content.Intent.ACTION_PACKAGE_ADDED)
+            addAction(android.content.Intent.ACTION_PACKAGE_REMOVED)
+            addDataScheme("package")
+        }
+        context.registerReceiver(receiver, filter)
+        onDispose {
+            context.unregisterReceiver(receiver)
+        }
     }
 
     Scaffold(

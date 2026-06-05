@@ -254,7 +254,9 @@ class StatsRepository(private val context: Context) {
         // Group by package name and sum up time
         val usageMap = stats.groupBy { it.packageName }
             .mapValues { entry -> entry.value.sumOf { it.totalTimeInForeground } }
-            .filter { it.value > 0 }
+            .filter { (pkg, time) -> 
+                time > 0 && pkg != "com.nothing.launcher" 
+            }
             .toList()
             .sortedByDescending { it.second }
             .take(limit)

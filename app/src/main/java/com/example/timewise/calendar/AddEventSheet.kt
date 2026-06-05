@@ -41,6 +41,7 @@ import java.time.ZoneId
 import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
 
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AddEventSheet(
@@ -54,7 +55,8 @@ fun AddEventSheet(
 ) {
     var title       by remember { mutableStateOf(initial.title) }
     var description by remember { mutableStateOf(initial.description) }
-    var date        by remember { mutableStateOf(initial.date) }
+    var startDate   by remember { mutableStateOf(initial.startDate) }
+    var endDate     by remember { mutableStateOf(initial.endDate) }
     var startTime   by remember { mutableStateOf(initial.startTime) }
     var endTime     by remember { mutableStateOf(initial.endTime) }
     var color       by remember { mutableStateOf(initial.color) }
@@ -64,6 +66,7 @@ fun AddEventSheet(
     var appSearch   by remember { mutableStateOf("") }
     var showDeleteConfirm by remember { mutableStateOf(false) }
     var showDatePicker    by remember { mutableStateOf(false) }
+    var editingStartDate  by remember { mutableStateOf(true) }
 
     val scrollState = rememberScrollState()
 
@@ -76,8 +79,9 @@ fun AddEventSheet(
     }
 
     if (showDatePicker) {
+        val dateToParse = if (editingStartDate) startDate else endDate
         val datePickerState = rememberDatePickerState(
-            initialSelectedDateMillis = LocalDate.parse(date)
+            initialSelectedDateMillis = LocalDate.parse(dateToParse)
                 .atStartOfDay(ZoneId.systemDefault())
                 .toInstant()
                 .toEpochMilli()
@@ -87,10 +91,17 @@ fun AddEventSheet(
             confirmButton = {
                 TextButton(onClick = {
                     datePickerState.selectedDateMillis?.let { millis ->
-                        date = Instant.ofEpochMilli(millis)
+                        val selected = Instant.ofEpochMilli(millis)
                             .atZone(ZoneId.of("UTC"))
                             .toLocalDate()
                             .toString()
+                        if (editingStartDate) {
+                            startDate = selected
+                            if (endDate < startDate) endDate = startDate
+                        } else {
+                            endDate = selected
+                            if (endDate < startDate) startDate = endDate
+                        }
                     }
                     showDatePicker = false
                 }) { Text("OK") }
@@ -139,11 +150,12 @@ fun AddEventSheet(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 20.dp)
-                .padding(bottom = 32.dp),
+                .padding(bottom = 32.dp)
+                .navigationBarsPadding(),
         ) {
             Column(
                 modifier = Modifier
-                    .weight(1f, fill = showAppPicker)
+                    .weight(1f, fill = false)
                     .verticalScroll(scrollState),
                 verticalArrangement = Arrangement.spacedBy(16.dp),
             ) {
@@ -190,34 +202,61 @@ fun AddEventSheet(
                 )
 
                 // Date selection
-                val displayDate = remember(date) {
-                    runCatching {
-                        LocalDate.parse(date).format(DateTimeFormatter.ofPattern("dd/MM/yyyy"))
-                    }.getOrDefault(date)
-                }
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable { showDatePicker = true }
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    modifier = Modifier.fillMaxWidth(),
                 ) {
-                    OutlinedTextField(
-                        value         = displayDate,
-                        onValueChange = { },
-                        label         = { Text("Date") },
-                        readOnly      = true,
-                        modifier      = Modifier.fillMaxWidth(),
-                        shape         = RoundedCornerShape(12.dp),
-                        trailingIcon  = {
-                            Icon(Icons.Outlined.CalendarMonth, contentDescription = "Select date")
-                        },
-                        enabled       = false,
-                        colors        = OutlinedTextFieldDefaults.colors(
-                            disabledTextColor = MaterialTheme.colorScheme.onSurface,
-                            disabledBorderColor = MaterialTheme.colorScheme.outline,
-                            disabledLabelColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                            disabledTrailingIconColor = MaterialTheme.colorScheme.onSurfaceVariant
+                    val displayStart = remember(startDate) {
+                        runCatching {
+                            LocalDate.parse(startDate).format(DateTimeFormatter.ofPattern("dd/MM/yyyy"))
+                        }.getOrDefault(startDate)
+                    }
+                    Box(modifier = Modifier.weight(1f).clickable { editingStartDate = true; showDatePicker = true }) {
+                        OutlinedTextField(
+                            value         = displayStart,
+                            onValueChange = { },
+                            label         = { Text("Start Date") },
+                            readOnly      = true,
+                            modifier      = Modifier.fillMaxWidth(),
+                            shape         = RoundedCornerShape(12.dp),
+                            trailingIcon  = {
+                                Icon(Icons.Outlined.CalendarMonth, contentDescription = "Select start date")
+                            },
+                            enabled       = false,
+                            colors        = OutlinedTextFieldDefaults.colors(
+                                disabledTextColor = MaterialTheme.colorScheme.onSurface,
+                                disabledBorderColor = MaterialTheme.colorScheme.outline,
+                                disabledLabelColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                                disabledTrailingIconColor = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
                         )
-                    )
+                    }
+
+                    val displayEnd = remember(endDate) {
+                        runCatching {
+                            LocalDate.parse(endDate).format(DateTimeFormatter.ofPattern("dd/MM/yyyy"))
+                        }.getOrDefault(endDate)
+                    }
+                    Box(modifier = Modifier.weight(1f).clickable { editingStartDate = false; showDatePicker = true }) {
+                        OutlinedTextField(
+                            value         = displayEnd,
+                            onValueChange = { },
+                            label         = { Text("End Date") },
+                            readOnly      = true,
+                            modifier      = Modifier.fillMaxWidth(),
+                            shape         = RoundedCornerShape(12.dp),
+                            trailingIcon  = {
+                                Icon(Icons.Outlined.CalendarMonth, contentDescription = "Select end date")
+                            },
+                            enabled       = false,
+                            colors        = OutlinedTextFieldDefaults.colors(
+                                disabledTextColor = MaterialTheme.colorScheme.onSurface,
+                                disabledBorderColor = MaterialTheme.colorScheme.outline,
+                                disabledLabelColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                                disabledTrailingIconColor = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        )
+                    }
                 }
 
                 // Time row
@@ -228,13 +267,33 @@ fun AddEventSheet(
                     TimeField(
                         label    = "Start",
                         value    = startTime,
-                        onChange = { startTime = it },
+                        onChange = {
+                            startTime = it
+                            runCatching {
+                                val st = LocalTime.parse(startTime)
+                                val et = LocalTime.parse(endTime)
+                                if (et.isBefore(st) && startDate == endDate) {
+                                    endDate = LocalDate.parse(startDate).plusDays(1).toString()
+                                }
+                            }
+                        },
                         modifier = Modifier.weight(1f),
                     )
                     TimeField(
                         label    = "End",
                         value    = endTime,
-                        onChange = { endTime = it },
+                        onChange = {
+                            endTime = it
+                            runCatching {
+                                val st = LocalTime.parse(startTime)
+                                val et = LocalTime.parse(endTime)
+                                if (et.isBefore(st) && startDate == endDate) {
+                                    endDate = LocalDate.parse(startDate).plusDays(1).toString()
+                                } else if (!et.isBefore(st) && endDate == LocalDate.parse(startDate).plusDays(1).toString()) {
+                                    endDate = startDate
+                                }
+                            }
+                        },
                         modifier = Modifier.weight(1f),
                     )
                 }
@@ -261,7 +320,7 @@ fun AddEventSheet(
                                 .clickable { color = c },
                         )
                     }
-                    
+
                     if (defaultColors.contains(color)) {
                         // "+" button for more colors
                         Box(
@@ -411,7 +470,8 @@ fun AddEventSheet(
                         initial.copy(
                             title       = title.trim(),
                             description = description.trim(),
-                            date        = date,
+                            startDate   = startDate,
+                            endDate     = endDate,
                             startTime   = startTime,
                             endTime     = endTime,
                             color       = color,
@@ -438,7 +498,7 @@ fun ColorPickerDialog(
     selectedColor: EventColor
 ) {
     val listState = rememberLazyListState()
-    
+
     Dialog(onDismissRequest = onDismissRequest) {
         Surface(
             shape = RoundedCornerShape(28.dp),
@@ -505,11 +565,11 @@ fun Modifier.drawVerticalScrollbar(
         if (firstVisibleElementIndex != null) {
             val totalItemsCount = state.layoutInfo.totalItemsCount
             val visibleItemsCount = state.layoutInfo.visibleItemsInfo.size
-            
+
             if (totalItemsCount > visibleItemsCount) {
                 val scrollbarFullHeight = this.size.height
                 val scrollbarHeight = (visibleItemsCount.toFloat() / totalItemsCount) * scrollbarFullHeight
-                
+
                 val firstVisibleItem = state.layoutInfo.visibleItemsInfo.firstOrNull()
                 if (firstVisibleItem != null) {
                     val scrollbarOffsetY = (firstVisibleItem.index.toFloat() / totalItemsCount) * scrollbarFullHeight +
