@@ -1,8 +1,6 @@
 package com.example.timewise.calendar
 
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
+import androidx.compose.animation.*
 import androidx.compose.foundation.*
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
@@ -114,30 +112,75 @@ fun CalendarScreen(vm: CalendarViewModel = viewModel()) {
                         CircularProgressIndicator()
                     }
                 } else {
-                    when (state.viewMode) {
-                        CalendarView.DAY -> DayTimeline(
-                            events = state.events,
-                            selectedDate = state.selectedDate,
-                            onTap = vm::openSheetForEdit,
-                            onSlotTap = { d, t -> vm.openSheetForNew(d, t) },
-                            onDragUpdate = vm::updateGhostEvent,
-                            onDragEnd = vm::finishGhostDrag,
-                            ghostEvent = if (state.showGhost) state.editingEvent else null
-                        )
-                        CalendarView.WEEK -> WeekTimeline(
-                            events = state.events,
-                            selectedDate = state.selectedDate,
-                            onTap = vm::openSheetForEdit,
-                            onSlotTap = { d, t -> vm.openSheetForNew(d, t) },
-                            onDragUpdate = vm::updateGhostEvent,
-                            onDragEnd = vm::finishGhostDrag,
-                            ghostEvent = if (state.showGhost) state.editingEvent else null
-                        )
-                        CalendarView.MONTH -> MonthTimeline(
-                            events = state.events,
-                            selectedDate = state.selectedDate,
-                            onTap = vm::openSheetForEdit
-                        )
+                    val periodKey = when (state.viewMode) {
+                        CalendarView.DAY -> state.selectedDate.toString()
+                        CalendarView.WEEK -> state.selectedDate.minusDays(state.selectedDate.dayOfWeek.value.toLong() - 1).toString()
+                        CalendarView.MONTH -> "${state.selectedDate.year}-${state.selectedDate.monthValue}"
+                    }
+
+                    // Snapshot everything needed for a slide to ensure data stays stable during animation
+                    AnimatedContent(
+                        targetState = Triple(state.viewMode, periodKey, state.selectedDate),
+                        transitionSpec = {
+                            val (oldMode, oldPeriod, oldDate) = initialState
+                            val (newMode, newPeriod, newDate) = targetState
+
+                            val transition = when {
+                                newMode != oldMode -> {
+                                    if (newMode.ordinal > oldMode.ordinal) {
+                                        (slideInHorizontally { width -> width } + fadeIn()).togetherWith(
+                                            slideOutHorizontally { width -> -width } + fadeOut()
+                                        )
+                                    } else {
+                                        (slideInHorizontally { width -> -width } + fadeIn()).togetherWith(
+                                            slideOutHorizontally { width -> width } + fadeOut()
+                                        )
+                                    }
+                                }
+                                newPeriod != oldPeriod -> {
+                                    if (newDate.isAfter(oldDate)) {
+                                        (slideInHorizontally { width -> width } + fadeIn()).togetherWith(
+                                            slideOutHorizontally { width -> -width } + fadeOut()
+                                        )
+                                    } else {
+                                        (slideInHorizontally { width -> -width } + fadeIn()).togetherWith(
+                                            slideOutHorizontally { width -> width } + fadeOut()
+                                        )
+                                    }
+                                }
+                                else -> EnterTransition.None togetherWith ExitTransition.None
+                            }
+                            transition.using(SizeTransform(clip = false))
+                        },
+                        label = "CalendarTransition"
+                    ) { (targetMode, _, targetDate) ->
+                        // Always use current events from state to avoid transition glitches
+                        val targetEvents = state.events
+                        when (targetMode) {
+                            CalendarView.DAY -> DayTimeline(
+                                events = targetEvents,
+                                selectedDate = targetDate,
+                                onTap = vm::openSheetForEdit,
+                                onSlotTap = { d, t -> vm.openSheetForNew(d, t) },
+                                onDragUpdate = vm::updateGhostEvent,
+                                onDragEnd = vm::finishGhostDrag,
+                                ghostEvent = if (state.showGhost) state.editingEvent else null
+                            )
+                            CalendarView.WEEK -> WeekTimeline(
+                                events = targetEvents,
+                                selectedDate = targetDate,
+                                onTap = vm::openSheetForEdit,
+                                onSlotTap = { d, t -> vm.openSheetForNew(d, t) },
+                                onDragUpdate = vm::updateGhostEvent,
+                                onDragEnd = vm::finishGhostDrag,
+                                ghostEvent = if (state.showGhost) state.editingEvent else null
+                            )
+                            CalendarView.MONTH -> MonthTimeline(
+                                events = targetEvents,
+                                selectedDate = targetDate,
+                                onTap = vm::openSheetForEdit
+                            )
+                        }
                     }
                 }
             }
@@ -279,6 +322,7 @@ private fun DayTimeline(
     Box(
         modifier = Modifier
             .fillMaxSize()
+            .background(MaterialTheme.colorScheme.surface)
             .verticalScroll(scrollState)
     ) {
         // 1. Grid Background (Horizontal lines & Time labels)
@@ -351,6 +395,9 @@ private fun DayTimeline(
         ) {
             val dateStr = selectedDate.toString()
             events.forEach { event ->
+                // Guard against events that don't belong to this day (crucial during view transitions)
+                if (dateStr < event.startDate || dateStr > event.endDate) return@forEach
+
                 val start = runCatching {
                     if (event.startDate == dateStr) LocalTime.parse(event.startTime) else LocalTime.MIDNIGHT
                 }.getOrNull()
@@ -525,7 +572,7 @@ private fun WeekTimeline(
         scrollState.scrollTo(with(density) { (targetHour * hourHeight.value).dp.roundToPx() })
     }
 
-    Column(modifier = Modifier.fillMaxSize()) {
+    Column(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surface)) {
         // Header (Day names)
         Row(modifier = Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface)) {
             Spacer(modifier = Modifier.width(timeWidth))
@@ -777,7 +824,7 @@ private fun MonthTimeline(
 
     val dayNames = listOf("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
 
-    Column(modifier = Modifier.fillMaxSize().padding(8.dp)) {
+    Column(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surface).padding(8.dp)) {
         // Weekday headers
         Row(modifier = Modifier.fillMaxWidth()) {
             dayNames.forEach { name ->
