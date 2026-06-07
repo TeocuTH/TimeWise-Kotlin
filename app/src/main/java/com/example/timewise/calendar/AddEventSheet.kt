@@ -80,37 +80,39 @@ fun AddEventSheet(
 
     if (showDatePicker) {
         val dateToParse = if (editingStartDate) startDate else endDate
-        val datePickerState = rememberDatePickerState(
-            initialSelectedDateMillis = LocalDate.parse(dateToParse)
-                .atStartOfDay(ZoneId.systemDefault())
-                .toInstant()
-                .toEpochMilli()
-        )
-        DatePickerDialog(
-            onDismissRequest = { showDatePicker = false },
-            confirmButton = {
-                TextButton(onClick = {
-                    datePickerState.selectedDateMillis?.let { millis ->
-                        val selected = Instant.ofEpochMilli(millis)
-                            .atZone(ZoneId.of("UTC"))
-                            .toLocalDate()
-                            .toString()
-                        if (editingStartDate) {
-                            startDate = selected
-                            if (endDate < startDate) endDate = startDate
-                        } else {
-                            endDate = selected
-                            if (endDate < startDate) startDate = endDate
+        key(dateToParse) {
+            val datePickerState = rememberDatePickerState(
+                initialSelectedDateMillis = LocalDate.parse(dateToParse)
+                    .atStartOfDay(ZoneOffset.UTC)
+                    .toInstant()
+                    .toEpochMilli()
+            )
+            DatePickerDialog(
+                onDismissRequest = { showDatePicker = false },
+                confirmButton = {
+                    TextButton(onClick = {
+                        datePickerState.selectedDateMillis?.let { millis ->
+                            val selected = Instant.ofEpochMilli(millis)
+                                .atZone(ZoneOffset.UTC)
+                                .toLocalDate()
+                                .toString()
+                            if (editingStartDate) {
+                                startDate = selected
+                                if (endDate < startDate) endDate = startDate
+                            } else {
+                                endDate = selected
+                                if (endDate < startDate) startDate = endDate
+                            }
                         }
-                    }
-                    showDatePicker = false
-                }) { Text("OK") }
-            },
-            dismissButton = {
-                TextButton(onClick = { showDatePicker = false }) { Text("Cancel") }
+                        showDatePicker = false
+                    }) { Text("OK") }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showDatePicker = false }) { Text("Cancel") }
+                }
+            ) {
+                DatePicker(state = datePickerState)
             }
-        ) {
-            DatePicker(state = datePickerState)
         }
     }
 
@@ -265,7 +267,7 @@ fun AddEventSheet(
                     modifier = Modifier.fillMaxWidth(),
                 ) {
                     TimeField(
-                        label    = "Start",
+                        label    = "From",
                         value    = startTime,
                         onChange = {
                             startTime = it
@@ -280,7 +282,7 @@ fun AddEventSheet(
                         modifier = Modifier.weight(1f),
                     )
                     TimeField(
-                        label    = "End",
+                        label    = "To",
                         value    = endTime,
                         onChange = {
                             endTime = it
