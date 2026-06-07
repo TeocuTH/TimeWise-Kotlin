@@ -38,6 +38,7 @@ data class CalendarUiState(
     // Add/edit sheet state
     val showSheet: Boolean             = false,
     val isEditing: Boolean             = false,
+    val showGhost: Boolean             = false,
     val editingEvent: CalendarEvent?   = null,
     val viewMode: CalendarView         = CalendarView.DAY
 )
@@ -152,25 +153,63 @@ class CalendarViewModel(app: Application) : AndroidViewModel(app) {
 
     // ── Sheet ─────────────────────────────────────────────────────────────────
 
-    fun openSheetForNew(date: LocalDate = _uiState.value.selectedDate, startTime: String = "09:00") {
-        val endTime = try {
-            val start = LocalTime.parse(startTime)
-            start.plusHours(1).format(DateTimeFormatter.ofPattern("HH:mm"))
-        } catch (e: Exception) { "10:00" }
+    fun openSheetForNew(date: LocalDate = _uiState.value.selectedDate, startTime: String? = null, endTime: String? = null) {
+        val start = if (startTime != null) {
+            LocalTime.parse(startTime)
+        } else {
+            val now = LocalTime.now()
+            when {
+                now.minute == 0 -> now
+                now.minute <= 30 -> now.withMinute(30)
+                else -> now.plusHours(1).withMinute(0)
+            }.withSecond(0).withNano(0)
+        }
+
+        val end = if (endTime != null) {
+            LocalTime.parse(endTime)
+        } else {
+            start.plusHours(1)
+        }
 
         val newEvent = newEventForDate(date).copy(
-            startTime = startTime,
-            endTime = endTime
+            startTime = start.format(timeFmt),
+            endTime = end.format(timeFmt)
         )
-        _uiState.update { it.copy(showSheet = true, isEditing = false, editingEvent = newEvent) }
+        _uiState.update { it.copy(
+            showSheet = true,
+            isEditing = false,
+            showGhost = startTime != null,
+            editingEvent = newEvent
+        ) }
+    }
+
+    fun updateGhostEvent(date: LocalDate, startTime: LocalTime, endTime: LocalTime) {
+        val ghost = newEventForDate(date).copy(
+            startTime = startTime.format(timeFmt),
+            endTime = endTime.format(timeFmt)
+        )
+        _uiState.update { it.copy(editingEvent = ghost, showGhost = true) }
+    }
+
+    fun clearGhostEvent() {
+        if (!_uiState.value.showSheet) {
+            _uiState.update { it.copy(editingEvent = null, showGhost = false) }
+        }
+    }
+
+    fun finishGhostDrag(date: LocalDate) {
+        val ghost = _uiState.value.editingEvent
+        if (ghost != null) {
+            _uiState.update { it.copy(showSheet = true, isEditing = false, showGhost = true) }
+        }
     }
 
     fun openSheetForEdit(event: CalendarEvent) {
-        _uiState.update { it.copy(showSheet = true, isEditing = true, editingEvent = event) }
+        _uiState.update { it.copy(showSheet = true, isEditing = true, showGhost = true, editingEvent = event) }
     }
 
     fun closeSheet() {
-        _uiState.update { it.copy(showSheet = false, isEditing = false, editingEvent = null) }
+        _uiState.update { it.copy(showSheet = false, isEditing = false, showGhost = false, editingEvent = null) }
     }
 
     // ── Installed apps ────────────────────────────────────────────────────────

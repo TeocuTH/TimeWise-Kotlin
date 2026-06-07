@@ -6,6 +6,8 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.*
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -118,14 +120,18 @@ fun CalendarScreen(vm: CalendarViewModel = viewModel()) {
                             selectedDate = state.selectedDate,
                             onTap = vm::openSheetForEdit,
                             onSlotTap = { d, t -> vm.openSheetForNew(d, t) },
-                            ghostEvent = if (!state.isEditing) state.editingEvent else null
+                            onDragUpdate = vm::updateGhostEvent,
+                            onDragEnd = vm::finishGhostDrag,
+                            ghostEvent = if (state.showGhost) state.editingEvent else null
                         )
                         CalendarView.WEEK -> WeekTimeline(
                             events = state.events,
                             selectedDate = state.selectedDate,
                             onTap = vm::openSheetForEdit,
                             onSlotTap = { d, t -> vm.openSheetForNew(d, t) },
-                            ghostEvent = if (!state.isEditing) state.editingEvent else null
+                            onDragUpdate = vm::updateGhostEvent,
+                            onDragEnd = vm::finishGhostDrag,
+                            ghostEvent = if (state.showGhost) state.editingEvent else null
                         )
                         CalendarView.MONTH -> MonthTimeline(
                             events = state.events,
@@ -234,6 +240,8 @@ private fun DayTimeline(
     selectedDate: LocalDate,
     onTap: (CalendarEvent) -> Unit,
     onSlotTap: (LocalDate, String) -> Unit,
+    onDragUpdate: (LocalDate, LocalTime, LocalTime) -> Unit = { _, _, _ -> },
+    onDragEnd: (LocalDate) -> Unit = { _ -> },
     ghostEvent: CalendarEvent? = null,
 ) {
     val timeWidth = 56.dp
@@ -253,6 +261,16 @@ private fun DayTimeline(
     }
 
     val density = LocalDensity.current
+    val hourHeightPx = with(density) { hourHeight.toPx() }
+
+    fun getTimeAt(y: Float): LocalTime {
+        val totalMinutes = (y / hourHeightPx * 60).toInt().coerceIn(0, 24 * 60 - 1)
+        val roundedMinutes = (totalMinutes / 15) * 15
+        return LocalTime.of(roundedMinutes / 60, roundedMinutes % 60)
+    }
+
+    var dragStartLocalTime by remember { mutableStateOf<LocalTime?>(null) }
+
     LaunchedEffect(selectedDate) {
         val targetHour = if (isToday) (LocalTime.now().hour - 1).coerceAtLeast(0) else 7
         scrollState.scrollTo(with(density) { (targetHour * hourHeight.value).dp.roundToPx() })
@@ -287,28 +305,6 @@ private fun DayTimeline(
                             thickness = 0.5.dp,
                             color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.2f)
                         )
-                        
-                        // Clickable slots (top/bottom half)
-                        Column(Modifier.fillMaxSize()) {
-                            Box(
-                                Modifier
-                                    .fillMaxWidth()
-                                    .weight(1f)
-                                    .clickable(
-                                        interactionSource = remember { MutableInteractionSource() },
-                                        indication = null
-                                    ) { onSlotTap(selectedDate, "%02d:00".format(h)) }
-                            )
-                            Box(
-                                Modifier
-                                    .fillMaxWidth()
-                                    .weight(1f)
-                                    .clickable(
-                                        interactionSource = remember { MutableInteractionSource() },
-                                        indication = null
-                                    ) { onSlotTap(selectedDate, "%02d:30".format(h)) }
-                            )
-                        }
                     }
                 }
             }
@@ -320,6 +316,38 @@ private fun DayTimeline(
                 .fillMaxWidth()
                 .height(totalHeight)
                 .padding(start = timeWidth, end = 8.dp)
+                .pointerInput(selectedDate) {
+                    detectTapGestures(
+                        onTap = { offset ->
+                            val time = getTimeAt(offset.y)
+                            onSlotTap(selectedDate, time.format(DateTimeFormatter.ofPattern("HH:mm")))
+                        }
+                    )
+                }
+                .pointerInput(selectedDate) {
+                    detectDragGesturesAfterLongPress(
+                        onDragStart = { offset ->
+                            val time = getTimeAt(offset.y)
+                            dragStartLocalTime = time
+                            onDragUpdate(selectedDate, time, time.plusMinutes(30))
+                        },
+                        onDrag = { change, _ ->
+                            change.consume()
+                            val startTime = dragStartLocalTime ?: return@detectDragGesturesAfterLongPress
+                            val currentTime = getTimeAt(change.position.y)
+                            val start = if (currentTime.isBefore(startTime)) currentTime else startTime
+                            val end = if (currentTime.isAfter(startTime)) currentTime else startTime
+                            onDragUpdate(selectedDate, start, end.coerceAtLeast(start.plusMinutes(15)))
+                        },
+                        onDragEnd = {
+                            onDragEnd(selectedDate)
+                            dragStartLocalTime = null
+                        },
+                        onDragCancel = {
+                            dragStartLocalTime = null
+                        }
+                    )
+                }
         ) {
             val dateStr = selectedDate.toString()
             events.forEach { event ->
@@ -374,16 +402,16 @@ private fun DayTimeline(
                                 .size(8.dp)
                                 .align(Alignment.TopStart)
                                 .offset(x = (-2).dp, y = (-2).dp)
-                                .background(Color.White, CircleShape)
-                                .border(1.dp, Color(0xFF6C63FF), CircleShape)
+                                .background(Color(0xFF6C63FF), CircleShape)
+                                .border(1.dp, Color.White, CircleShape)
                         )
                         Box(
                             Modifier
                                 .size(8.dp)
                                 .align(Alignment.BottomEnd)
                                 .offset(x = 2.dp, y = 2.dp)
-                                .background(Color.White, CircleShape)
-                                .border(1.dp, Color(0xFF6C63FF), CircleShape)
+                                .background(Color(0xFF6C63FF), CircleShape)
+                                .border(1.dp, Color.White, CircleShape)
                         )
                     }
                 }
@@ -460,6 +488,8 @@ private fun WeekTimeline(
     selectedDate: LocalDate,
     onTap: (CalendarEvent) -> Unit,
     onSlotTap: (LocalDate, String) -> Unit,
+    onDragUpdate: (LocalDate, LocalTime, LocalTime) -> Unit = { _, _, _ -> },
+    onDragEnd: (LocalDate) -> Unit = { _ -> },
     ghostEvent: CalendarEvent? = null,
 ) {
     val startOfWeek = selectedDate.minusDays(selectedDate.dayOfWeek.value.toLong() - 1)
@@ -477,6 +507,16 @@ private fun WeekTimeline(
     }
 
     val density = LocalDensity.current
+    val hourHeightPx = with(density) { hourHeight.toPx() }
+
+    fun getTimeAt(y: Float): LocalTime {
+        val totalMinutes = (y / hourHeightPx * 60).toInt().coerceIn(0, 24 * 60 - 1)
+        val roundedMinutes = (totalMinutes / 15) * 15
+        return LocalTime.of(roundedMinutes / 60, roundedMinutes % 60)
+    }
+
+    var dragStartLocalTime by remember { mutableStateOf<LocalTime?>(null) }
+
     LaunchedEffect(selectedDate) {
         val endOfWeek = startOfWeek.plusDays(6)
         val today = LocalDate.now()
@@ -519,11 +559,10 @@ private fun WeekTimeline(
                 .fillMaxSize()
                 .verticalScroll(scrollState)
         ) {
-            // 1. Grid Background (Vertical lines + clickable slots)
+            // 1. Grid Background (Vertical lines)
             Row(modifier = Modifier.fillMaxWidth().height(totalHeight)) {
                 Spacer(modifier = Modifier.width(timeWidth))
                 for (i in 0..6) {
-                    val date = startOfWeek.plusDays(i.toLong())
                     Column(
                         modifier = Modifier
                             .weight(1f)
@@ -531,26 +570,8 @@ private fun WeekTimeline(
                             .border(0.25.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.2f))
                     ) {
                         for (h in 0..23) {
-                            // Top half: HH:00
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height(hourHeight / 2)
-                                    .clickable(
-                                        interactionSource = remember { MutableInteractionSource() },
-                                        indication = null
-                                    ) { onSlotTap(date, "%02d:00".format(h)) }
-                            )
-                            // Bottom half (near border): HH:30
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height(hourHeight / 2)
-                                    .clickable(
-                                        interactionSource = remember { MutableInteractionSource() },
-                                        indication = null
-                                    ) { onSlotTap(date, "%02d:30".format(h)) }
-                            )
+                            Box(modifier = Modifier.fillMaxWidth().height(hourHeight / 2))
+                            Box(modifier = Modifier.fillMaxWidth().height(hourHeight / 2))
                         }
                     }
                 }
@@ -590,7 +611,43 @@ private fun WeekTimeline(
                     val dateStr = date.toString()
                     val dayEvents = events.filter { dateStr >= it.startDate && dateStr <= it.endDate }
 
-                    Box(modifier = Modifier.weight(1f).fillMaxHeight()) {
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxHeight()
+                            .pointerInput(date) {
+                                detectTapGestures(
+                                    onTap = { offset ->
+                                        val time = getTimeAt(offset.y)
+                                        onSlotTap(date, time.format(DateTimeFormatter.ofPattern("HH:mm")))
+                                    }
+                                )
+                            }
+                            .pointerInput(date) {
+                                detectDragGesturesAfterLongPress(
+                                    onDragStart = { offset ->
+                                        val time = getTimeAt(offset.y)
+                                        dragStartLocalTime = time
+                                        onDragUpdate(date, time, time.plusMinutes(30))
+                                    },
+                                    onDrag = { change, _ ->
+                                        change.consume()
+                                        val startTime = dragStartLocalTime ?: return@detectDragGesturesAfterLongPress
+                                        val currentTime = getTimeAt(change.position.y)
+                                        val start = if (currentTime.isBefore(startTime)) currentTime else startTime
+                                        val end = if (currentTime.isAfter(startTime)) currentTime else startTime
+                                        onDragUpdate(date, start, end.coerceAtLeast(start.plusMinutes(15)))
+                                    },
+                                    onDragEnd = {
+                                        onDragEnd(date)
+                                        dragStartLocalTime = null
+                                    },
+                                    onDragCancel = {
+                                        dragStartLocalTime = null
+                                    }
+                                )
+                            }
+                    ) {
                         dayEvents.forEach { event ->
                             val start = runCatching {
                                 if (event.startDate == dateStr) LocalTime.parse(event.startTime) else LocalTime.MIDNIGHT
@@ -660,16 +717,16 @@ private fun WeekTimeline(
                                             .size(8.dp)
                                             .align(Alignment.TopStart)
                                             .offset(x = (-2).dp, y = (-2).dp)
-                                            .background(Color.White, CircleShape)
-                                            .border(1.dp, Color(0xFF6C63FF), CircleShape)
+                                            .background(Color(0xFF6C63FF), CircleShape)
+                                            .border(1.dp, Color.White, CircleShape)
                                     )
                                     Box(
                                         Modifier
                                             .size(8.dp)
                                             .align(Alignment.BottomEnd)
                                             .offset(x = 2.dp, y = 2.dp)
-                                            .background(Color.White, CircleShape)
-                                            .border(1.dp, Color(0xFF6C63FF), CircleShape)
+                                            .background(Color(0xFF6C63FF), CircleShape)
+                                            .border(1.dp, Color.White, CircleShape)
                                     )
                                 }
                             }

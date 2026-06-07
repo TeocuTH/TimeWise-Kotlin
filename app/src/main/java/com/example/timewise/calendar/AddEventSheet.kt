@@ -34,6 +34,7 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.core.graphics.drawable.toBitmap
 import kotlinx.coroutines.delay
+import java.time.Duration
 import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalTime
@@ -59,6 +60,15 @@ fun AddEventSheet(
     var endDate     by remember { mutableStateOf(initial.endDate) }
     var startTime   by remember { mutableStateOf(initial.startTime) }
     var endTime     by remember { mutableStateOf(initial.endTime) }
+
+    var durationMinutes by remember {
+        val dur = runCatching {
+            val start = LocalDate.parse(initial.startDate).atTime(LocalTime.parse(initial.startTime))
+            val end = LocalDate.parse(initial.endDate).atTime(LocalTime.parse(initial.endTime))
+            Duration.between(start, end).toMinutes()
+        }.getOrDefault(60L)
+        mutableLongStateOf(dur)
+    }
     var color       by remember { mutableStateOf(initial.color) }
     var showColorPicker by remember { mutableStateOf(false) }
     var blocked     by remember { mutableStateOf(initial.blockedApps.toSet()) }
@@ -98,10 +108,21 @@ fun AddEventSheet(
                                 .toString()
                             if (editingStartDate) {
                                 startDate = selected
-                                if (endDate < startDate) endDate = startDate
+                                runCatching {
+                                    val st = LocalTime.parse(startTime)
+                                    val newEndFull = LocalDate.parse(startDate).atTime(st).plusMinutes(durationMinutes)
+                                    endDate = newEndFull.toLocalDate().toString()
+                                    endTime = newEndFull.toLocalTime().format(DateTimeFormatter.ofPattern("HH:mm"))
+                                }
                             } else {
                                 endDate = selected
-                                if (endDate < startDate) startDate = endDate
+                                runCatching {
+                                    val st = LocalTime.parse(startTime)
+                                    val et = LocalTime.parse(endTime)
+                                    val startFull = LocalDate.parse(startDate).atTime(st)
+                                    val endFull = LocalDate.parse(endDate).atTime(et)
+                                    durationMinutes = Duration.between(startFull, endFull).toMinutes()
+                                }
                             }
                         }
                         showDatePicker = false
@@ -273,10 +294,11 @@ fun AddEventSheet(
                             startTime = it
                             runCatching {
                                 val st = LocalTime.parse(startTime)
-                                val et = LocalTime.parse(endTime)
-                                if (et.isBefore(st) && startDate == endDate) {
-                                    endDate = LocalDate.parse(startDate).plusDays(1).toString()
-                                }
+                                val startDt = LocalDate.parse(startDate)
+                                val newEndFull = startDt.atTime(st).plusMinutes(durationMinutes)
+                                
+                                endTime = newEndFull.toLocalTime().format(DateTimeFormatter.ofPattern("HH:mm"))
+                                endDate = newEndFull.toLocalDate().toString()
                             }
                         },
                         modifier = Modifier.weight(1f),
@@ -289,11 +311,18 @@ fun AddEventSheet(
                             runCatching {
                                 val st = LocalTime.parse(startTime)
                                 val et = LocalTime.parse(endTime)
-                                if (et.isBefore(st) && startDate == endDate) {
-                                    endDate = LocalDate.parse(startDate).plusDays(1).toString()
-                                } else if (!et.isBefore(st) && endDate == LocalDate.parse(startDate).plusDays(1).toString()) {
-                                    endDate = startDate
+                                val startDt = LocalDate.parse(startDate)
+                                var endDt = LocalDate.parse(endDate)
+                                
+                                // If end time is before start time on the same day, assume next day
+                                if (et.isBefore(st) && startDt == endDt) {
+                                    endDt = startDt.plusDays(1)
+                                    endDate = endDt.toString()
                                 }
+                                
+                                val startFull = startDt.atTime(st)
+                                val endFull = endDt.atTime(et)
+                                durationMinutes = Duration.between(startFull, endFull).toMinutes()
                             }
                         },
                         modifier = Modifier.weight(1f),
