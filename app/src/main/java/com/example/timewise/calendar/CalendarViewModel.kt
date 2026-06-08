@@ -215,7 +215,7 @@ class CalendarViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun openSheetForEdit(event: CalendarEvent) {
-        _uiState.update { it.copy(showSheet = true, isEditing = true, showGhost = true, editingEvent = event) }
+        _uiState.update { it.copy(showSheet = true, isEditing = true, showGhost = false, editingEvent = event) }
     }
 
     fun closeSheet() {
