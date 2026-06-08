@@ -97,10 +97,13 @@ fun AddEventSheet(
         }
     }
 
+    val currentIsEditing by rememberUpdatedState(isEditing)
+    val currentHasUnsavedChanges by rememberUpdatedState(hasUnsavedChanges)
+
     val sheetState = rememberModalBottomSheetState(
         skipPartiallyExpanded = true,
         confirmValueChange = { newValue ->
-            if (newValue == SheetValue.Hidden && !isEditing && hasUnsavedChanges) {
+            if (newValue == SheetValue.Hidden && !currentIsEditing && currentHasUnsavedChanges) {
                 showDiscardConfirm = true
                 false
             } else {
