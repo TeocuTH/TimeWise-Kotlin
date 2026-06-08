@@ -278,6 +278,113 @@ private fun DateHeader(
 
 // ── Timeline ──────────────────────────────────────────────────────────────────
 
+private data class TimedDayEvent(
+    val event: CalendarEvent,
+    val startMinutes: Int,
+    val endMinutes: Int,
+)
+
+private data class PositionedDayEvent(
+    val event: CalendarEvent,
+    val startMinutes: Int,
+    val endMinutes: Int,
+    val column: Int,
+    val columnCount: Int,
+)
+
+private fun buildDayEventLayout(
+    events: List<CalendarEvent>,
+    dateStr: String
+): List<PositionedDayEvent> {
+    val timedEvents = events.mapNotNull { event ->
+        if (dateStr < event.startDate || dateStr > event.endDate) return@mapNotNull null
+
+        val start = runCatching {
+            if (event.startDate == dateStr) LocalTime.parse(event.startTime) else LocalTime.MIDNIGHT
+        }.getOrNull() ?: return@mapNotNull null
+
+        val end = runCatching {
+            if (event.endDate == dateStr) LocalTime.parse(event.endTime) else LocalTime.MAX
+        }.getOrNull() ?: return@mapNotNull null
+
+        val startMinutes = start.hour * 60 + start.minute
+        val endMinutes = if (end == LocalTime.MAX) {
+            24 * 60
+        } else {
+            end.hour * 60 + end.minute
+        }
+
+        TimedDayEvent(
+            event = event,
+            startMinutes = startMinutes,
+            endMinutes = endMinutes.coerceAtLeast(startMinutes + 20)
+        )
+    }.sortedWith(
+        compareBy<TimedDayEvent> { it.startMinutes }
+            .thenByDescending { it.endMinutes }
+    )
+
+    val result = mutableListOf<PositionedDayEvent>()
+    var cluster = mutableListOf<TimedDayEvent>()
+    var clusterEnd = -1
+
+    fun flushCluster() {
+        if (cluster.isEmpty()) return
+
+        val columnEnds = mutableListOf<Int>()
+        val assigned = mutableListOf<Pair<TimedDayEvent, Int>>()
+
+        cluster.forEach { item ->
+            val reusableColumn = columnEnds.indexOfFirst { it <= item.startMinutes }
+
+            val column = if (reusableColumn >= 0) {
+                columnEnds[reusableColumn] = item.endMinutes
+                reusableColumn
+            } else {
+                columnEnds.add(item.endMinutes)
+                columnEnds.lastIndex
+            }
+
+            assigned.add(item to column)
+        }
+
+        val columnCount = columnEnds.size.coerceAtLeast(1)
+
+        assigned.forEach { (item, column) ->
+            result.add(
+                PositionedDayEvent(
+                    event = item.event,
+                    startMinutes = item.startMinutes,
+                    endMinutes = item.endMinutes,
+                    column = column,
+                    columnCount = columnCount
+                )
+            )
+        }
+
+        cluster = mutableListOf()
+        clusterEnd = -1
+    }
+
+    timedEvents.forEach { item ->
+        if (cluster.isEmpty()) {
+            cluster.add(item)
+            clusterEnd = item.endMinutes
+        } else if (item.startMinutes < clusterEnd) {
+            cluster.add(item)
+            clusterEnd = maxOf(clusterEnd, item.endMinutes)
+        } else {
+            flushCluster()
+            cluster.add(item)
+            clusterEnd = item.endMinutes
+        }
+    }
+
+    flushCluster()
+
+    return result
+}
+
 @Composable
 private fun DayTimeline(
     events: List<CalendarEvent>,
