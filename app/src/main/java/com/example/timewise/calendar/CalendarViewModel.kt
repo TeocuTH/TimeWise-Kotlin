@@ -91,6 +91,16 @@ class CalendarViewModel(app: Application) : AndroidViewModel(app) {
         loadEventsForMode(mode, _uiState.value.selectedDate)
     }
 
+    fun openDayFromMonth(date: LocalDate) {
+        _uiState.update {
+            it.copy(
+                selectedDate = date,
+                viewMode = CalendarView.DAY
+            )
+        }
+        loadEventsForMode(CalendarView.DAY, date)
+    }
+
     // ── Events ────────────────────────────────────────────────────────────────
 
     private fun loadEventsForDate(date: LocalDate) {

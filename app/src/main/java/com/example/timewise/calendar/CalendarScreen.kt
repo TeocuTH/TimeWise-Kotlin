@@ -79,7 +79,6 @@ fun CalendarScreen(vm: CalendarViewModel = viewModel()) {
                 .fillMaxSize()
                 .padding(padding)
         ) {
-            // Date navigation header
             DateHeader(
                 date       = state.selectedDate,
                 viewMode   = state.viewMode,
@@ -118,7 +117,6 @@ fun CalendarScreen(vm: CalendarViewModel = viewModel()) {
                         CalendarView.MONTH -> "${state.selectedDate.year}-${state.selectedDate.monthValue}"
                     }
 
-                    // Snapshot everything needed for a slide to ensure data stays stable during animation
                     AnimatedContent(
                         targetState = Triple(state.viewMode, periodKey, state.selectedDate),
                         transitionSpec = {
@@ -154,7 +152,6 @@ fun CalendarScreen(vm: CalendarViewModel = viewModel()) {
                         },
                         label = "CalendarTransition"
                     ) { (targetMode, _, targetDate) ->
-                        // Always use current events from state to avoid transition glitches
                         val targetEvents = state.events
                         when (targetMode) {
                             CalendarView.DAY -> DayTimeline(
@@ -178,7 +175,8 @@ fun CalendarScreen(vm: CalendarViewModel = viewModel()) {
                             CalendarView.MONTH -> MonthTimeline(
                                 events = targetEvents,
                                 selectedDate = targetDate,
-                                onTap = vm::openSheetForEdit
+                                onTap = vm::openSheetForEdit,
+                                onDayTap = vm::openDayFromMonth
                             )
                         }
                     }
@@ -275,7 +273,93 @@ private fun DateHeader(
     }
 }
 
-// ── Timeline ──────────────────────────────────────────────────────────────────
+// ── Timeline overlap helper ───────────────────────────────────────────────────
+
+private data class TimedDayEvent(
+    val event: CalendarEvent,
+    val startMinutes: Int,
+    val endMinutes: Int,
+    val originalIndex: Int,
+)
+
+private data class PositionedDayEvent(
+    val event: CalendarEvent,
+    val startMinutes: Int,
+    val endMinutes: Int,
+    val column: Int,
+    val columnCount: Int,
+)
+
+private fun buildDayEventLayout(
+    events: List<CalendarEvent>,
+    dateStr: String
+): List<PositionedDayEvent> {
+    val timedEvents = events.mapIndexedNotNull { index, event ->
+        if (dateStr < event.startDate || dateStr > event.endDate) return@mapIndexedNotNull null
+
+        val start = runCatching {
+            if (event.startDate == dateStr) LocalTime.parse(event.startTime) else LocalTime.MIDNIGHT
+        }.getOrNull() ?: return@mapIndexedNotNull null
+
+        val end = runCatching {
+            if (event.endDate == dateStr) LocalTime.parse(event.endTime) else LocalTime.MAX
+        }.getOrNull() ?: return@mapIndexedNotNull null
+
+        val startMinutes = start.hour * 60 + start.minute
+        val endMinutes = if (end == LocalTime.MAX) {
+            24 * 60
+        } else {
+            end.hour * 60 + end.minute
+        }
+
+        TimedDayEvent(
+            event = event,
+            startMinutes = startMinutes,
+            endMinutes = endMinutes.coerceAtLeast(startMinutes + 25),
+            originalIndex = index
+        )
+    }.sortedWith(
+        compareBy<TimedDayEvent> { it.startMinutes }
+            .thenBy { it.originalIndex }
+    )
+
+    val startGroups = mutableListOf<MutableList<TimedDayEvent>>()
+
+    timedEvents.forEach { item ->
+        val matchingGroup = startGroups.firstOrNull { group ->
+            group.any { other ->
+                kotlin.math.abs(other.startMinutes - item.startMinutes) <= 25
+            }
+        }
+
+        if (matchingGroup != null) {
+            matchingGroup.add(item)
+        } else {
+            startGroups.add(mutableListOf(item))
+        }
+    }
+
+    return startGroups.flatMap { group ->
+        val sortedGroup = group.sortedWith(
+            compareBy<TimedDayEvent> { it.startMinutes }
+                .thenBy { it.originalIndex }
+        )
+
+        val columnCount = sortedGroup.size
+
+        sortedGroup.mapIndexed { column, item ->
+            PositionedDayEvent(
+                event = item.event,
+                startMinutes = item.startMinutes,
+                endMinutes = item.endMinutes,
+                column = if (columnCount > 1) column else 0,
+                columnCount = if (columnCount > 1) columnCount else 1
+            )
+        }
+    }
+}
+
+// ── Day timeline ──────────────────────────────────────────────────────────────
 
 @Composable
 private fun DayTimeline(
@@ -298,7 +382,7 @@ private fun DayTimeline(
         LaunchedEffect(Unit) {
             while (true) {
                 currentTime = LocalTime.now()
-                kotlinx.coroutines.delay(60000) // Update every minute
+                kotlinx.coroutines.delay(60000)
             }
         }
     }
@@ -325,7 +409,6 @@ private fun DayTimeline(
             .background(MaterialTheme.colorScheme.surface)
             .verticalScroll(scrollState)
     ) {
-        // 1. Grid Background (Horizontal lines & Time labels)
         Column(modifier = Modifier.fillMaxWidth().height(totalHeight)) {
             for (h in 0..23) {
                 Row(modifier = Modifier.height(hourHeight).fillMaxWidth()) {
@@ -354,7 +437,6 @@ private fun DayTimeline(
             }
         }
 
-        // 2. Events Layer
         Box(
             modifier = Modifier
                 .fillMaxWidth()
@@ -394,37 +476,44 @@ private fun DayTimeline(
                 }
         ) {
             val dateStr = selectedDate.toString()
-            events.forEach { event ->
-                // Guard against events that don't belong to this day (crucial during view transitions)
-                if (dateStr < event.startDate || dateStr > event.endDate) return@forEach
+            val positionedEvents = buildDayEventLayout(events, dateStr)
 
-                val start = runCatching {
-                    if (event.startDate == dateStr) LocalTime.parse(event.startTime) else LocalTime.MIDNIGHT
-                }.getOrNull()
-                val end = runCatching {
-                    if (event.endDate == dateStr) LocalTime.parse(event.endTime) else LocalTime.MAX
-                }.getOrNull()
+            BoxWithConstraints(
+                modifier = Modifier.fillMaxSize()
+            ) {
+                positionedEvents.forEach { positioned ->
+                    val event = positioned.event
+                    val duration = (positioned.endMinutes - positioned.startMinutes).coerceAtLeast(25)
 
-                if (start != null && end != null) {
-                    val startMinutes = start.hour * 60 + start.minute
-                    val endMinutes = if (end == LocalTime.MAX) 24 * 60 else end.hour * 60 + end.minute
-                    val duration = (endMinutes - startMinutes).coerceAtLeast(20)
-
-                    val topOffset = (startMinutes * hourHeight.value / 60).dp
+                    val topOffset = (positioned.startMinutes * hourHeight.value / 60).dp
                     val boxHeight = (duration * hourHeight.value / 60).dp
+
+                    val gap = 4.dp
+                    val columnWidth = maxWidth / positioned.columnCount
+
+                    val eventWidth = if (positioned.columnCount > 1) {
+                        columnWidth - gap
+                    } else {
+                        maxWidth
+                    }
+
+                    val eventX = if (positioned.columnCount > 1) {
+                        columnWidth * positioned.column
+                    } else {
+                        0.dp
+                    }
 
                     DayEventItem(
                         event = event,
                         modifier = Modifier
-                            .offset(y = topOffset)
-                            .height(boxHeight)
-                            .fillMaxWidth(),
+                            .offset(x = eventX, y = topOffset)
+                            .width(eventWidth)
+                            .height(boxHeight),
                         onTap = { onTap(event) }
                     )
                 }
             }
 
-            // Ghost Event Layer
             if (ghostEvent != null && ghostEvent.startDate == selectedDate.toString()) {
                 val start = runCatching { LocalTime.parse(ghostEvent.startTime) }.getOrNull()
                 val end = runCatching { LocalTime.parse(ghostEvent.endTime) }.getOrNull()
@@ -443,7 +532,6 @@ private fun DayTimeline(
                             .border(2.dp, Color(0xFF6C63FF), RoundedCornerShape(6.dp))
                             .background(Color(0xFF6C63FF).copy(alpha = 0.1f), RoundedCornerShape(6.dp))
                     ) {
-                        // Corner "handles"
                         Box(
                             Modifier
                                 .size(8.dp)
@@ -464,7 +552,6 @@ private fun DayTimeline(
                 }
             }
 
-            // 3. Current Time Indicator
             if (isToday) {
                 val nowMinutes = currentTime.hour * 60 + currentTime.minute
                 val nowOffset = (nowMinutes * hourHeight.value / 60).dp
@@ -529,6 +616,8 @@ private fun DayEventItem(
     }
 }
 
+// ── Week timeline ─────────────────────────────────────────────────────────────
+
 @Composable
 private fun WeekTimeline(
     events: List<CalendarEvent>,
@@ -573,7 +662,6 @@ private fun WeekTimeline(
     }
 
     Column(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surface)) {
-        // Header (Day names)
         Row(modifier = Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface)) {
             Spacer(modifier = Modifier.width(timeWidth))
             for (i in 0..6) {
@@ -600,13 +688,11 @@ private fun WeekTimeline(
 
         HorizontalDivider(thickness = 0.5.dp, color = MaterialTheme.colorScheme.outlineVariant)
 
-        // ── Main Timeline Area ──
         Box(
             modifier = Modifier
                 .fillMaxSize()
                 .verticalScroll(scrollState)
         ) {
-            // 1. Grid Background (Vertical lines)
             Row(modifier = Modifier.fillMaxWidth().height(totalHeight)) {
                 Spacer(modifier = Modifier.width(timeWidth))
                 for (i in 0..6) {
@@ -624,11 +710,9 @@ private fun WeekTimeline(
                 }
             }
 
-            // 2. Horizontal lines & Time labels
             Column(modifier = Modifier.fillMaxWidth().height(totalHeight)) {
                 for (h in 0..23) {
                     Row(modifier = Modifier.height(hourHeight).fillMaxWidth()) {
-                        // Time label
                         Box(modifier = Modifier.width(timeWidth).fillMaxHeight(), contentAlignment = Alignment.TopCenter) {
                             Text(
                                 text = "%02d:00".format(h),
@@ -638,7 +722,6 @@ private fun WeekTimeline(
                                 modifier = Modifier.padding(top = 2.dp)
                             )
                         }
-                        // Divider
                         Box(modifier = Modifier.weight(1f).fillMaxHeight()) {
                             HorizontalDivider(
                                 modifier = Modifier.align(Alignment.TopStart),
@@ -650,7 +733,6 @@ private fun WeekTimeline(
                 }
             }
 
-            // 3. Events Layer
             Row(modifier = Modifier.fillMaxWidth().height(totalHeight)) {
                 Spacer(modifier = Modifier.width(timeWidth))
                 for (i in 0..6) {
@@ -695,35 +777,46 @@ private fun WeekTimeline(
                                 )
                             }
                     ) {
-                        dayEvents.forEach { event ->
-                            val start = runCatching {
-                                if (event.startDate == dateStr) LocalTime.parse(event.startTime) else LocalTime.MIDNIGHT
-                            }.getOrNull()
-                            val end = runCatching {
-                                if (event.endDate == dateStr) LocalTime.parse(event.endTime) else LocalTime.MAX
-                            }.getOrNull()
-                            
-                            if (start != null && end != null) {
-                                val startMinutes = start.hour * 60 + start.minute
-                                val endMinutes = if (end == LocalTime.MAX) 24 * 60 else end.hour * 60 + end.minute
-                                val duration = (endMinutes - startMinutes).coerceAtLeast(20)
+                        val positionedEvents = buildDayEventLayout(dayEvents, dateStr)
 
-                                val topOffset = (startMinutes * hourHeight.value / 60).dp
+                        BoxWithConstraints(
+                            modifier = Modifier.fillMaxSize()
+                        ) {
+                            positionedEvents.forEach { positioned ->
+                                val event = positioned.event
+                                val duration = (positioned.endMinutes - positioned.startMinutes).coerceAtLeast(25)
+
+                                val topOffset = (positioned.startMinutes * hourHeight.value / 60).dp
                                 val boxHeight = (duration * hourHeight.value / 60).dp
+
+                                val gap = 3.dp
+                                val columnWidth = maxWidth / positioned.columnCount
+
+                                val eventWidth = if (positioned.columnCount > 1) {
+                                    columnWidth - gap
+                                } else {
+                                    maxWidth
+                                }
+
+                                val eventX = if (positioned.columnCount > 1) {
+                                    columnWidth * positioned.column
+                                } else {
+                                    0.dp
+                                }
 
                                 Box(
                                     modifier = Modifier
                                         .padding(horizontal = 2.dp)
-                                        .offset(y = topOffset)
+                                        .offset(x = eventX, y = topOffset)
+                                        .width(eventWidth)
                                         .height(boxHeight)
-                                        .fillMaxWidth()
                                         .clip(RoundedCornerShape(4.dp))
                                         .background(Color(event.color.accentHex))
                                         .border(1.dp, Color.White.copy(alpha = 0.5f), RoundedCornerShape(4.dp))
                                         .clickable { onTap(event) }
                                         .padding(horizontal = 5.dp, vertical = 2.dp)
                                 ) {
-                                    if (boxHeight > 16.dp) {
+                                    if (boxHeight > 16.dp && positioned.columnCount == 1) {
                                         Text(
                                             text = event.title,
                                             style = MaterialTheme.typography.labelSmall,
@@ -738,7 +831,6 @@ private fun WeekTimeline(
                             }
                         }
 
-                        // ── Ghost Event Layer ──
                         if (ghostEvent != null && ghostEvent.startDate == dateStr) {
                             val start = runCatching { LocalTime.parse(ghostEvent.startTime) }.getOrNull()
                             val end = runCatching { LocalTime.parse(ghostEvent.endTime) }.getOrNull()
@@ -758,7 +850,6 @@ private fun WeekTimeline(
                                         .border(2.dp, Color(0xFF6C63FF), RoundedCornerShape(6.dp))
                                         .background(Color(0xFF6C63FF).copy(alpha = 0.1f), RoundedCornerShape(6.dp))
                                 ) {
-                                    // Corner "handles" to match the visual style
                                     Box(
                                         Modifier
                                             .size(8.dp)
@@ -779,7 +870,6 @@ private fun WeekTimeline(
                             }
                         }
 
-                        // Current Time Indicator
                         if (date == LocalDate.now()) {
                             val nowMinutes = currentTime.hour * 60 + currentTime.minute
                             val nowOffset = (nowMinutes * hourHeight.value / 60).dp
@@ -809,11 +899,14 @@ private fun WeekTimeline(
     }
 }
 
+// ── Month timeline ────────────────────────────────────────────────────────────
+
 @Composable
 private fun MonthTimeline(
     events: List<CalendarEvent>,
     selectedDate: LocalDate,
     onTap: (CalendarEvent) -> Unit,
+    onDayTap: (LocalDate) -> Unit,
 ) {
     val dateFmt = DateTimeFormatter.ofPattern("yyyy-MM-dd")
     val firstOfMonth = selectedDate.withDayOfMonth(1)
@@ -825,7 +918,6 @@ private fun MonthTimeline(
     val dayNames = listOf("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
 
     Column(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surface).padding(8.dp)) {
-        // Weekday headers
         Row(modifier = Modifier.fillMaxWidth()) {
             dayNames.forEach { name ->
                 Text(
@@ -840,15 +932,13 @@ private fun MonthTimeline(
 
         Spacer(Modifier.height(8.dp))
 
-        // Grid of days
         val weeks = mutableListOf<List<Int?>>()
         var currentWeek = mutableListOf<Int?>()
-        
-        // Add padding
+
         for (i in 0 until paddingDays) {
             currentWeek.add(null)
         }
-        
+
         for (day in 1..daysInMonth) {
             currentWeek.add(day)
             if (currentWeek.size == 7) {
@@ -856,8 +946,7 @@ private fun MonthTimeline(
                 currentWeek = mutableListOf()
             }
         }
-        
-        // Final row padding
+
         if (currentWeek.isNotEmpty()) {
             while (currentWeek.size < 7) currentWeek.add(null)
             weeks.add(currentWeek)
@@ -872,6 +961,12 @@ private fun MonthTimeline(
                                 .weight(1f)
                                 .fillMaxHeight()
                                 .border(0.5.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
+                                .clickable(enabled = dayNum != null) {
+                                    dayNum?.let {
+                                        val date = selectedDate.withDayOfMonth(it)
+                                        onDayTap(date)
+                                    }
+                                }
                         ) {
                             if (dayNum != null) {
                                 val date = selectedDate.withDayOfMonth(dayNum)
@@ -890,7 +985,7 @@ private fun MonthTimeline(
                                         color = if (isToday) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
                                     )
                                     Spacer(Modifier.height(2.dp))
-                                    // Event indicators
+
                                     Column(verticalArrangement = Arrangement.spacedBy(1.dp)) {
                                         dayEvents.take(3).forEach { ev ->
                                             Box(
@@ -966,7 +1061,6 @@ private fun EventCard(event: CalendarEvent, onTap: () -> Unit) {
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
     ) {
         Row(modifier = Modifier.fillMaxWidth()) {
-            // Left accent stripe
             Box(
                 modifier = Modifier
                     .width(4.dp)
@@ -979,7 +1073,6 @@ private fun EventCard(event: CalendarEvent, onTap: () -> Unit) {
                     .weight(1f)
                     .padding(horizontal = 14.dp, vertical = 12.dp),
             ) {
-                // Time range
                 Text(
                     text  = "${event.startTime} – ${event.endTime}",
                     style = MaterialTheme.typography.labelMedium,
@@ -989,7 +1082,6 @@ private fun EventCard(event: CalendarEvent, onTap: () -> Unit) {
 
                 Spacer(Modifier.height(2.dp))
 
-                // Title
                 Text(
                     text       = event.title.ifBlank { "Untitled event" },
                     style      = MaterialTheme.typography.bodyLarge,
@@ -998,7 +1090,6 @@ private fun EventCard(event: CalendarEvent, onTap: () -> Unit) {
                     overflow   = TextOverflow.Ellipsis,
                 )
 
-                // Description
                 if (event.description.isNotBlank()) {
                     Text(
                         text     = event.description,
@@ -1009,7 +1100,6 @@ private fun EventCard(event: CalendarEvent, onTap: () -> Unit) {
                     )
                 }
 
-                // Blocked apps badge
                 if (event.blockedApps.isNotEmpty()) {
                     Spacer(Modifier.height(6.dp))
                     Row(
@@ -1031,7 +1121,6 @@ private fun EventCard(event: CalendarEvent, onTap: () -> Unit) {
                 }
             }
 
-            // Edit chevron
             Icon(
                 imageVector        = Icons.Outlined.ChevronRight,
                 contentDescription = "Edit",

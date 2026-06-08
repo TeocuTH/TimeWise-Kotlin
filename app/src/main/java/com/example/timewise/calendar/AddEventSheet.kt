@@ -77,6 +77,37 @@ fun AddEventSheet(
     var showDeleteConfirm by remember { mutableStateOf(false) }
     var showDatePicker    by remember { mutableStateOf(false) }
     var editingStartDate  by remember { mutableStateOf(true) }
+    var showDiscardConfirm by remember { mutableStateOf(false) }
+
+    val hasUnsavedChanges =
+        title != initial.title ||
+                description != initial.description ||
+                startDate != initial.startDate ||
+                endDate != initial.endDate ||
+                startTime != initial.startTime ||
+                endTime != initial.endTime ||
+                color != initial.color ||
+                blocked != initial.blockedApps.toSet()
+
+    fun requestDismiss() {
+        if (!isEditing && hasUnsavedChanges) {
+            showDiscardConfirm = true
+        } else {
+            onDismiss()
+        }
+    }
+
+    val sheetState = rememberModalBottomSheetState(
+        skipPartiallyExpanded = true,
+        confirmValueChange = { newValue ->
+            if (newValue == SheetValue.Hidden && !isEditing && hasUnsavedChanges) {
+                showDiscardConfirm = true
+                false
+            } else {
+                true
+            }
+        }
+    )
 
     val scrollState = rememberScrollState()
 
@@ -86,6 +117,42 @@ fun AddEventSheet(
             delay(100)
             scrollState.animateScrollTo(scrollState.maxValue)
         }
+    }
+
+    if (showDiscardConfirm) {
+        AlertDialog(
+            onDismissRequest = {
+                showDiscardConfirm = false
+            },
+            title = {
+                Text("Discard changes?")
+            },
+            text = {
+                Text("You have unsaved changes. Do you want to go back without creating this event?")
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showDiscardConfirm = false
+                        onDismiss()
+                    }
+                ) {
+                    Text(
+                        text = "Yes, discard",
+                        color = MaterialTheme.colorScheme.error
+                    )
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = {
+                        showDiscardConfirm = false
+                    }
+                ) {
+                    Text("No, keep editing")
+                }
+            }
+        )
     }
 
     if (showDatePicker) {
@@ -165,8 +232,8 @@ fun AddEventSheet(
     }
 
     ModalBottomSheet(
-        onDismissRequest = onDismiss,
-        sheetState       = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+        onDismissRequest = { requestDismiss() },
+        sheetState       = sheetState,
         dragHandle       = { BottomSheetDefaults.DragHandle() },
     ) {
         Column(
