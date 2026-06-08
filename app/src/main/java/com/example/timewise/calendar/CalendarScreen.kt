@@ -178,7 +178,8 @@ fun CalendarScreen(vm: CalendarViewModel = viewModel()) {
                             CalendarView.MONTH -> MonthTimeline(
                                 events = targetEvents,
                                 selectedDate = targetDate,
-                                onTap = vm::openSheetForEdit
+                                onTap = vm::openSheetForEdit,
+                                onDayTap = vm::openDayFromMonth
                             )
                         }
                     }
@@ -814,6 +815,7 @@ private fun MonthTimeline(
     events: List<CalendarEvent>,
     selectedDate: LocalDate,
     onTap: (CalendarEvent) -> Unit,
+    onDayTap: (LocalDate) -> Unit,
 ) {
     val dateFmt = DateTimeFormatter.ofPattern("yyyy-MM-dd")
     val firstOfMonth = selectedDate.withDayOfMonth(1)
@@ -872,6 +874,12 @@ private fun MonthTimeline(
                                 .weight(1f)
                                 .fillMaxHeight()
                                 .border(0.5.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
+                                .clickable(enabled = dayNum != null) {
+                                    dayNum?.let {
+                                        val date = selectedDate.withDayOfMonth(it)
+                                        onDayTap(date)
+                                    }
+                                }
                         ) {
                             if (dayNum != null) {
                                 val date = selectedDate.withDayOfMonth(dayNum)
