@@ -1,21 +1,17 @@
 package com.example.timewise.calendar
 
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.foundation.background
-import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.animation.*
+import androidx.compose.foundation.*
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.scrollBy
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
@@ -38,22 +34,6 @@ import java.time.LocalTime
 import java.time.format.DateTimeFormatter
 import java.time.Duration
 
-// ── Colour helpers ────────────────────────────────────────────────────────────
-
-private fun EventColor.containerColor() = when (this) {
-    EventColor.PURPLE -> Color(0xFFEDECFF)
-    EventColor.TEAL   -> Color(0xFFE0F5EE)
-    EventColor.CORAL  -> Color(0xFFFAECE7)
-    EventColor.AMBER  -> Color(0xFFFAEEDA)
-}
-
-private fun EventColor.accentColor() = when (this) {
-    EventColor.PURPLE -> Color(0xFF6C63FF)
-    EventColor.TEAL   -> Color(0xFF1D9E75)
-    EventColor.CORAL  -> Color(0xFFD85A30)
-    EventColor.AMBER  -> Color(0xFFBA7517)
-}
-
 // ── Screen ────────────────────────────────────────────────────────────────────
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -66,7 +46,7 @@ fun CalendarScreen(vm: CalendarViewModel = viewModel()) {
             initial      = state.editingEvent ?: vm.newEventForDate(state.selectedDate),
             installedApps = state.installedApps,
             suggestedApps = state.suggestedApps,
-            isEditing    = state.editingEvent != null,
+            isEditing    = state.isEditing,
             onSave       = vm::saveEvent,
             onDelete     = { vm.deleteEvent(it) },
             onDismiss    = vm::closeSheet,
@@ -87,7 +67,7 @@ fun CalendarScreen(vm: CalendarViewModel = viewModel()) {
         },
         floatingActionButton = {
             FloatingActionButton(
-                onClick            = vm::openSheetForNew,
+                onClick            = { vm.openSheetForNew() },
                 containerColor     = MaterialTheme.colorScheme.primary,
             ) {
                 Icon(Icons.Outlined.Add, contentDescription = "Add event")
@@ -103,41 +83,105 @@ fun CalendarScreen(vm: CalendarViewModel = viewModel()) {
             DateHeader(
                 date       = state.selectedDate,
                 viewMode   = state.viewMode,
-                onPrevious = {
-                    when (state.viewMode) {
-                        CalendarView.DAY -> vm.previousDay()
-                        CalendarView.WEEK -> vm.selectDate(state.selectedDate.minusWeeks(1))
-                        CalendarView.MONTH -> vm.selectDate(state.selectedDate.minusMonths(1))
-                    }
-                },
-                onNext     = {
-                    when (state.viewMode) {
-                        CalendarView.DAY -> vm.nextDay()
-                        CalendarView.WEEK -> vm.selectDate(state.selectedDate.plusWeeks(1))
-                        CalendarView.MONTH -> vm.selectDate(state.selectedDate.plusMonths(1))
-                    }
-                },
+                onPrevious = vm::previousPeriod,
+                onNext     = vm::nextPeriod,
             )
 
             HorizontalDivider()
 
-            if (state.loading) {
-                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator()
-                }
-            } else {
-                when (state.viewMode) {
-                    CalendarView.DAY -> DayTimeline(events = state.events, onTap = vm::openSheetForEdit)
-                    CalendarView.WEEK -> WeekTimeline(
-                        events = state.events,
-                        selectedDate = state.selectedDate,
-                        onTap = vm::openSheetForEdit
-                    )
-                    CalendarView.MONTH -> MonthTimeline(
-                        events = state.events,
-                        selectedDate = state.selectedDate,
-                        onTap = vm::openSheetForEdit
-                    )
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .pointerInput(state.viewMode, state.selectedDate) {
+                        var totalDrag = 0f
+                        detectHorizontalDragGestures(
+                            onDragEnd = {
+                                if (totalDrag > 100) vm.previousPeriod()
+                                else if (totalDrag < -100) vm.nextPeriod()
+                                totalDrag = 0f
+                            },
+                            onHorizontalDrag = { change, dragAmount ->
+                                change.consume()
+                                totalDrag += dragAmount
+                            }
+                        )
+                    }
+            ) {
+                if (state.loading) {
+                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        CircularProgressIndicator()
+                    }
+                } else {
+                    val periodKey = when (state.viewMode) {
+                        CalendarView.DAY -> state.selectedDate.toString()
+                        CalendarView.WEEK -> state.selectedDate.minusDays(state.selectedDate.dayOfWeek.value.toLong() - 1).toString()
+                        CalendarView.MONTH -> "${state.selectedDate.year}-${state.selectedDate.monthValue}"
+                    }
+
+                    // Snapshot everything needed for a slide to ensure data stays stable during animation
+                    AnimatedContent(
+                        targetState = Triple(state.viewMode, periodKey, state.selectedDate),
+                        transitionSpec = {
+                            val (oldMode, oldPeriod, oldDate) = initialState
+                            val (newMode, newPeriod, newDate) = targetState
+
+                            val transition = when {
+                                newMode != oldMode -> {
+                                    if (newMode.ordinal > oldMode.ordinal) {
+                                        (slideInHorizontally { width -> width } + fadeIn()).togetherWith(
+                                            slideOutHorizontally { width -> -width } + fadeOut()
+                                        )
+                                    } else {
+                                        (slideInHorizontally { width -> -width } + fadeIn()).togetherWith(
+                                            slideOutHorizontally { width -> width } + fadeOut()
+                                        )
+                                    }
+                                }
+                                newPeriod != oldPeriod -> {
+                                    if (newDate.isAfter(oldDate)) {
+                                        (slideInHorizontally { width -> width } + fadeIn()).togetherWith(
+                                            slideOutHorizontally { width -> -width } + fadeOut()
+                                        )
+                                    } else {
+                                        (slideInHorizontally { width -> -width } + fadeIn()).togetherWith(
+                                            slideOutHorizontally { width -> width } + fadeOut()
+                                        )
+                                    }
+                                }
+                                else -> EnterTransition.None togetherWith ExitTransition.None
+                            }
+                            transition.using(SizeTransform(clip = false))
+                        },
+                        label = "CalendarTransition"
+                    ) { (targetMode, _, targetDate) ->
+                        // Always use current events from state to avoid transition glitches
+                        val targetEvents = state.events
+                        when (targetMode) {
+                            CalendarView.DAY -> DayTimeline(
+                                events = targetEvents,
+                                selectedDate = targetDate,
+                                onTap = vm::openSheetForEdit,
+                                onSlotTap = { d, t -> vm.openSheetForNew(d, t) },
+                                onDragUpdate = vm::updateGhostEvent,
+                                onDragEnd = vm::finishGhostDrag,
+                                ghostEvent = if (state.showGhost) state.editingEvent else null
+                            )
+                            CalendarView.WEEK -> WeekTimeline(
+                                events = targetEvents,
+                                selectedDate = targetDate,
+                                onTap = vm::openSheetForEdit,
+                                onSlotTap = { d, t -> vm.openSheetForNew(d, t) },
+                                onDragUpdate = vm::updateGhostEvent,
+                                onDragEnd = vm::finishGhostDrag,
+                                ghostEvent = if (state.showGhost) state.editingEvent else null
+                            )
+                            CalendarView.MONTH -> MonthTimeline(
+                                events = targetEvents,
+                                selectedDate = targetDate,
+                                onTap = vm::openSheetForEdit
+                            )
+                        }
+                    }
                 }
             }
         }
@@ -236,42 +280,251 @@ private fun DateHeader(
 @Composable
 private fun DayTimeline(
     events: List<CalendarEvent>,
+    selectedDate: LocalDate,
     onTap: (CalendarEvent) -> Unit,
+    onSlotTap: (LocalDate, String) -> Unit,
+    onDragUpdate: (LocalDate, LocalTime, LocalTime) -> Unit = { _, _, _ -> },
+    onDragEnd: (LocalDate) -> Unit = { _ -> },
+    ghostEvent: CalendarEvent? = null,
 ) {
-    if (events.isEmpty()) {
-        Box(
-            modifier            = Modifier.fillMaxSize(),
-            contentAlignment    = Alignment.Center,
-        ) {
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Icon(
-                    imageVector = Icons.Outlined.CalendarToday,
-                    contentDescription = null,
-                    modifier    = Modifier.size(48.dp),
-                    tint        = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f),
-                )
-                Spacer(Modifier.height(12.dp))
-                Text(
-                    text  = "No events today",
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                Text(
-                    text  = "Tap + to add one",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
-                )
+    val timeWidth = 56.dp
+    val hourHeight = 64.dp
+    val totalHeight = hourHeight * 24
+    val scrollState = rememberScrollState()
+    val isToday = selectedDate == LocalDate.now()
+
+    var currentTime by remember { mutableStateOf(LocalTime.now()) }
+    if (isToday) {
+        LaunchedEffect(Unit) {
+            while (true) {
+                currentTime = LocalTime.now()
+                kotlinx.coroutines.delay(60000) // Update every minute
             }
         }
-        return
     }
 
-    LazyColumn(
-        contentPadding      = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
+    val density = LocalDensity.current
+    val hourHeightPx = with(density) { hourHeight.toPx() }
+
+    fun getTimeAt(y: Float): LocalTime {
+        val totalMinutes = (y / hourHeightPx * 60).toInt().coerceIn(0, 24 * 60 - 1)
+        val roundedMinutes = (totalMinutes / 15) * 15
+        return LocalTime.of(roundedMinutes / 60, roundedMinutes % 60)
+    }
+
+    var dragStartLocalTime by remember { mutableStateOf<LocalTime?>(null) }
+
+    LaunchedEffect(selectedDate) {
+        val targetHour = if (isToday) (LocalTime.now().hour - 1).coerceAtLeast(0) else 7
+        scrollState.scrollTo(with(density) { (targetHour * hourHeight.value).dp.roundToPx() })
+    }
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.surface)
+            .verticalScroll(scrollState)
     ) {
-        items(events, key = { it.id }) { event ->
-            EventCard(event = event, onTap = { onTap(event) })
+        // 1. Grid Background (Horizontal lines & Time labels)
+        Column(modifier = Modifier.fillMaxWidth().height(totalHeight)) {
+            for (h in 0..23) {
+                Row(modifier = Modifier.height(hourHeight).fillMaxWidth()) {
+                    Box(
+                        modifier = Modifier.width(timeWidth).fillMaxHeight(),
+                        contentAlignment = Alignment.TopCenter
+                    ) {
+                        if (h > 0) {
+                            Text(
+                                text = "%02d:00".format(h),
+                                style = MaterialTheme.typography.labelSmall,
+                                fontSize = 11.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                                modifier = Modifier.padding(top = 2.dp)
+                            )
+                        }
+                    }
+                    Box(modifier = Modifier.weight(1f).fillMaxHeight()) {
+                        HorizontalDivider(
+                            modifier = Modifier.align(Alignment.TopStart),
+                            thickness = 0.5.dp,
+                            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.2f)
+                        )
+                    }
+                }
+            }
+        }
+
+        // 2. Events Layer
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(totalHeight)
+                .padding(start = timeWidth, end = 8.dp)
+                .pointerInput(selectedDate) {
+                    detectTapGestures(
+                        onTap = { offset ->
+                            val time = getTimeAt(offset.y)
+                            onSlotTap(selectedDate, time.format(DateTimeFormatter.ofPattern("HH:mm")))
+                        }
+                    )
+                }
+                .pointerInput(selectedDate) {
+                    detectDragGesturesAfterLongPress(
+                        onDragStart = { offset ->
+                            val time = getTimeAt(offset.y)
+                            dragStartLocalTime = time
+                            onDragUpdate(selectedDate, time, time.plusMinutes(30))
+                        },
+                        onDrag = { change, _ ->
+                            change.consume()
+                            val startTime = dragStartLocalTime ?: return@detectDragGesturesAfterLongPress
+                            val currentTime = getTimeAt(change.position.y)
+                            val start = if (currentTime.isBefore(startTime)) currentTime else startTime
+                            val end = if (currentTime.isAfter(startTime)) currentTime else startTime
+                            onDragUpdate(selectedDate, start, end.coerceAtLeast(start.plusMinutes(15)))
+                        },
+                        onDragEnd = {
+                            onDragEnd(selectedDate)
+                            dragStartLocalTime = null
+                        },
+                        onDragCancel = {
+                            dragStartLocalTime = null
+                        }
+                    )
+                }
+        ) {
+            val dateStr = selectedDate.toString()
+            events.forEach { event ->
+                // Guard against events that don't belong to this day (crucial during view transitions)
+                if (dateStr < event.startDate || dateStr > event.endDate) return@forEach
+
+                val start = runCatching {
+                    if (event.startDate == dateStr) LocalTime.parse(event.startTime) else LocalTime.MIDNIGHT
+                }.getOrNull()
+                val end = runCatching {
+                    if (event.endDate == dateStr) LocalTime.parse(event.endTime) else LocalTime.MAX
+                }.getOrNull()
+
+                if (start != null && end != null) {
+                    val startMinutes = start.hour * 60 + start.minute
+                    val endMinutes = if (end == LocalTime.MAX) 24 * 60 else end.hour * 60 + end.minute
+                    val duration = (endMinutes - startMinutes).coerceAtLeast(20)
+
+                    val topOffset = (startMinutes * hourHeight.value / 60).dp
+                    val boxHeight = (duration * hourHeight.value / 60).dp
+
+                    DayEventItem(
+                        event = event,
+                        modifier = Modifier
+                            .offset(y = topOffset)
+                            .height(boxHeight)
+                            .fillMaxWidth(),
+                        onTap = { onTap(event) }
+                    )
+                }
+            }
+
+            // Ghost Event Layer
+            if (ghostEvent != null && ghostEvent.startDate == selectedDate.toString()) {
+                val start = runCatching { LocalTime.parse(ghostEvent.startTime) }.getOrNull()
+                val end = runCatching { LocalTime.parse(ghostEvent.endTime) }.getOrNull()
+
+                if (start != null && end != null) {
+                    val startMin = start.hour * 60 + start.minute
+                    val endMin = end.hour * 60 + end.minute
+                    val topOff = (startMin * hourHeight.value / 60).dp
+                    val bHeight = ((endMin - startMin) * hourHeight.value / 60).dp
+
+                    Box(
+                        modifier = Modifier
+                            .offset(y = topOff)
+                            .height(bHeight)
+                            .fillMaxWidth()
+                            .border(2.dp, Color(0xFF6C63FF), RoundedCornerShape(6.dp))
+                            .background(Color(0xFF6C63FF).copy(alpha = 0.1f), RoundedCornerShape(6.dp))
+                    ) {
+                        // Corner "handles"
+                        Box(
+                            Modifier
+                                .size(8.dp)
+                                .align(Alignment.TopStart)
+                                .offset(x = (-2).dp, y = (-2).dp)
+                                .background(Color(0xFF6C63FF), CircleShape)
+                                .border(1.dp, Color.White, CircleShape)
+                        )
+                        Box(
+                            Modifier
+                                .size(8.dp)
+                                .align(Alignment.BottomEnd)
+                                .offset(x = 2.dp, y = 2.dp)
+                                .background(Color(0xFF6C63FF), CircleShape)
+                                .border(1.dp, Color.White, CircleShape)
+                        )
+                    }
+                }
+            }
+
+            // 3. Current Time Indicator
+            if (isToday) {
+                val nowMinutes = currentTime.hour * 60 + currentTime.minute
+                val nowOffset = (nowMinutes * hourHeight.value / 60).dp
+
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .offset(y = nowOffset - 5.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(10.dp)
+                            .background(Color.Black, CircleShape)
+                    )
+                    HorizontalDivider(
+                        modifier = Modifier.weight(1f),
+                        thickness = 2.dp,
+                        color = Color.Black
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun DayEventItem(
+    event: CalendarEvent,
+    modifier: Modifier = Modifier,
+    onTap: () -> Unit
+) {
+    val accent = Color(event.color.accentHex)
+
+    Box(
+        modifier = modifier
+            .padding(horizontal = 2.dp, vertical = 1.dp)
+            .clip(RoundedCornerShape(8.dp))
+            .background(accent)
+            .clickable { onTap() }
+            .padding(8.dp)
+    ) {
+        Column {
+            Text(
+                text = event.title.ifBlank { "Untitled" },
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = FontWeight.Bold,
+                color = Color.White,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            if (event.description.isNotBlank()) {
+                Text(
+                    text = event.description,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = Color.White.copy(alpha = 0.8f),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
         }
     }
 }
@@ -281,6 +534,10 @@ private fun WeekTimeline(
     events: List<CalendarEvent>,
     selectedDate: LocalDate,
     onTap: (CalendarEvent) -> Unit,
+    onSlotTap: (LocalDate, String) -> Unit,
+    onDragUpdate: (LocalDate, LocalTime, LocalTime) -> Unit = { _, _, _ -> },
+    onDragEnd: (LocalDate) -> Unit = { _ -> },
+    ghostEvent: CalendarEvent? = null,
 ) {
     val startOfWeek = selectedDate.minusDays(selectedDate.dayOfWeek.value.toLong() - 1)
     val timeWidth = 40.dp
@@ -288,7 +545,34 @@ private fun WeekTimeline(
     val totalHeight = hourHeight * 24
     val scrollState = rememberScrollState()
 
-    Column(modifier = Modifier.fillMaxSize()) {
+    var currentTime by remember { mutableStateOf(LocalTime.now()) }
+    LaunchedEffect(Unit) {
+        while (true) {
+            currentTime = LocalTime.now()
+            kotlinx.coroutines.delay(60000)
+        }
+    }
+
+    val density = LocalDensity.current
+    val hourHeightPx = with(density) { hourHeight.toPx() }
+
+    fun getTimeAt(y: Float): LocalTime {
+        val totalMinutes = (y / hourHeightPx * 60).toInt().coerceIn(0, 24 * 60 - 1)
+        val roundedMinutes = (totalMinutes / 15) * 15
+        return LocalTime.of(roundedMinutes / 60, roundedMinutes % 60)
+    }
+
+    var dragStartLocalTime by remember { mutableStateOf<LocalTime?>(null) }
+
+    LaunchedEffect(selectedDate) {
+        val endOfWeek = startOfWeek.plusDays(6)
+        val today = LocalDate.now()
+        val isThisWeek = !today.isBefore(startOfWeek) && !today.isAfter(endOfWeek)
+        val targetHour = if (isThisWeek) (LocalTime.now().hour - 1).coerceAtLeast(0) else 7
+        scrollState.scrollTo(with(density) { (targetHour * hourHeight.value).dp.roundToPx() })
+    }
+
+    Column(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surface)) {
         // Header (Day names)
         Row(modifier = Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface)) {
             Spacer(modifier = Modifier.width(timeWidth))
@@ -326,12 +610,17 @@ private fun WeekTimeline(
             Row(modifier = Modifier.fillMaxWidth().height(totalHeight)) {
                 Spacer(modifier = Modifier.width(timeWidth))
                 for (i in 0..6) {
-                    Spacer(
+                    Column(
                         modifier = Modifier
                             .weight(1f)
                             .fillMaxHeight()
                             .border(0.25.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.2f))
-                    )
+                    ) {
+                        for (h in 0..23) {
+                            Box(modifier = Modifier.fillMaxWidth().height(hourHeight / 2))
+                            Box(modifier = Modifier.fillMaxWidth().height(hourHeight / 2))
+                        }
+                    }
                 }
             }
 
@@ -366,17 +655,57 @@ private fun WeekTimeline(
                 Spacer(modifier = Modifier.width(timeWidth))
                 for (i in 0..6) {
                     val date = startOfWeek.plusDays(i.toLong())
-                    val dateStr = date.format(DateTimeFormatter.ofPattern("yyyy-MM-dd"))
-                    val dayEvents = events.filter { it.date == dateStr }
+                    val dateStr = date.toString()
+                    val dayEvents = events.filter { dateStr >= it.startDate && dateStr <= it.endDate }
 
-                    Box(modifier = Modifier.weight(1f).fillMaxHeight()) {
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxHeight()
+                            .pointerInput(date) {
+                                detectTapGestures(
+                                    onTap = { offset ->
+                                        val time = getTimeAt(offset.y)
+                                        onSlotTap(date, time.format(DateTimeFormatter.ofPattern("HH:mm")))
+                                    }
+                                )
+                            }
+                            .pointerInput(date) {
+                                detectDragGesturesAfterLongPress(
+                                    onDragStart = { offset ->
+                                        val time = getTimeAt(offset.y)
+                                        dragStartLocalTime = time
+                                        onDragUpdate(date, time, time.plusMinutes(30))
+                                    },
+                                    onDrag = { change, _ ->
+                                        change.consume()
+                                        val startTime = dragStartLocalTime ?: return@detectDragGesturesAfterLongPress
+                                        val currentTime = getTimeAt(change.position.y)
+                                        val start = if (currentTime.isBefore(startTime)) currentTime else startTime
+                                        val end = if (currentTime.isAfter(startTime)) currentTime else startTime
+                                        onDragUpdate(date, start, end.coerceAtLeast(start.plusMinutes(15)))
+                                    },
+                                    onDragEnd = {
+                                        onDragEnd(date)
+                                        dragStartLocalTime = null
+                                    },
+                                    onDragCancel = {
+                                        dragStartLocalTime = null
+                                    }
+                                )
+                            }
+                    ) {
                         dayEvents.forEach { event ->
-                            val start = runCatching { LocalTime.parse(event.startTime) }.getOrNull()
-                            val end = runCatching { LocalTime.parse(event.endTime) }.getOrNull()
+                            val start = runCatching {
+                                if (event.startDate == dateStr) LocalTime.parse(event.startTime) else LocalTime.MIDNIGHT
+                            }.getOrNull()
+                            val end = runCatching {
+                                if (event.endDate == dateStr) LocalTime.parse(event.endTime) else LocalTime.MAX
+                            }.getOrNull()
                             
                             if (start != null && end != null) {
                                 val startMinutes = start.hour * 60 + start.minute
-                                val endMinutes = end.hour * 60 + end.minute
+                                val endMinutes = if (end == LocalTime.MAX) 24 * 60 else end.hour * 60 + end.minute
                                 val duration = (endMinutes - startMinutes).coerceAtLeast(20)
 
                                 val topOffset = (startMinutes * hourHeight.value / 60).dp
@@ -389,10 +718,10 @@ private fun WeekTimeline(
                                         .height(boxHeight)
                                         .fillMaxWidth()
                                         .clip(RoundedCornerShape(4.dp))
-                                        .background(event.color.accentColor())
+                                        .background(Color(event.color.accentHex))
                                         .border(1.dp, Color.White.copy(alpha = 0.5f), RoundedCornerShape(4.dp))
                                         .clickable { onTap(event) }
-                                        .padding(2.dp)
+                                        .padding(horizontal = 5.dp, vertical = 2.dp)
                                 ) {
                                     if (boxHeight > 16.dp) {
                                         Text(
@@ -406,6 +735,71 @@ private fun WeekTimeline(
                                         )
                                     }
                                 }
+                            }
+                        }
+
+                        // ── Ghost Event Layer ──
+                        if (ghostEvent != null && ghostEvent.startDate == dateStr) {
+                            val start = runCatching { LocalTime.parse(ghostEvent.startTime) }.getOrNull()
+                            val end = runCatching { LocalTime.parse(ghostEvent.endTime) }.getOrNull()
+
+                            if (start != null && end != null) {
+                                val startMin = start.hour * 60 + start.minute
+                                val endMin = end.hour * 60 + end.minute
+                                val topOff = (startMin * hourHeight.value / 60).dp
+                                val bHeight = ((endMin - startMin) * hourHeight.value / 60).dp
+
+                                Box(
+                                    modifier = Modifier
+                                        .padding(horizontal = 2.dp)
+                                        .offset(y = topOff)
+                                        .height(bHeight)
+                                        .fillMaxWidth()
+                                        .border(2.dp, Color(0xFF6C63FF), RoundedCornerShape(6.dp))
+                                        .background(Color(0xFF6C63FF).copy(alpha = 0.1f), RoundedCornerShape(6.dp))
+                                ) {
+                                    // Corner "handles" to match the visual style
+                                    Box(
+                                        Modifier
+                                            .size(8.dp)
+                                            .align(Alignment.TopStart)
+                                            .offset(x = (-2).dp, y = (-2).dp)
+                                            .background(Color(0xFF6C63FF), CircleShape)
+                                            .border(1.dp, Color.White, CircleShape)
+                                    )
+                                    Box(
+                                        Modifier
+                                            .size(8.dp)
+                                            .align(Alignment.BottomEnd)
+                                            .offset(x = 2.dp, y = 2.dp)
+                                            .background(Color(0xFF6C63FF), CircleShape)
+                                            .border(1.dp, Color.White, CircleShape)
+                                    )
+                                }
+                            }
+                        }
+
+                        // Current Time Indicator
+                        if (date == LocalDate.now()) {
+                            val nowMinutes = currentTime.hour * 60 + currentTime.minute
+                            val nowOffset = (nowMinutes * hourHeight.value / 60).dp
+
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .offset(y = nowOffset - 4.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(8.dp)
+                                        .background(Color.Black, CircleShape)
+                                )
+                                HorizontalDivider(
+                                    modifier = Modifier.weight(1f),
+                                    thickness = 1.5.dp,
+                                    color = Color.Black
+                                )
                             }
                         }
                     }
@@ -430,7 +824,7 @@ private fun MonthTimeline(
 
     val dayNames = listOf("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
 
-    Column(modifier = Modifier.fillMaxSize().padding(8.dp)) {
+    Column(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surface).padding(8.dp)) {
         // Weekday headers
         Row(modifier = Modifier.fillMaxWidth()) {
             dayNames.forEach { name ->
@@ -481,8 +875,8 @@ private fun MonthTimeline(
                         ) {
                             if (dayNum != null) {
                                 val date = selectedDate.withDayOfMonth(dayNum)
-                                val dateStr = date.format(dateFmt)
-                                val dayEvents = events.filter { it.date == dateStr }
+                                val dateStr = date.toString()
+                                val dayEvents = events.filter { dateStr >= it.startDate && dateStr <= it.endDate }
                                 val isToday = date == LocalDate.now()
 
                                 Column(
@@ -504,7 +898,7 @@ private fun MonthTimeline(
                                                     .fillMaxWidth()
                                                     .height(4.dp)
                                                     .clip(RoundedCornerShape(1.dp))
-                                                    .background(ev.color.accentColor())
+                                                    .background(Color(ev.color.accentHex))
                                                     .clickable { onTap(ev) }
                                             )
                                         }
@@ -560,8 +954,8 @@ private fun EmptyTimeline(message: String) {
 
 @Composable
 private fun EventCard(event: CalendarEvent, onTap: () -> Unit) {
-    val accent    = event.color.accentColor()
-    val container = event.color.containerColor()
+    val accent    = Color(event.color.accentHex)
+    val container = Color(event.color.containerHex)
 
     Card(
         shape   = RoundedCornerShape(14.dp),

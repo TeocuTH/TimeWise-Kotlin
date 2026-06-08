@@ -1,7 +1,6 @@
 package com.example.timewise.stats
 
 import android.content.Context
-import android.content.Intent
 import android.app.usage.UsageStatsManager
 import java.util.Calendar
 import android.content.SharedPreferences
@@ -23,7 +22,7 @@ data class AppUsageInfo(
     val packageName: String,
     val appName: String,
     val icon: Drawable?,
-    val usageTimeMillis: Long
+    val usageTimeMillis: Long,
 )
 
 /**
@@ -42,59 +41,62 @@ class StatsRepository(private val context: Context) {
     private val prefs: SharedPreferences =
         context.getSharedPreferences(PREF_FILE, Context.MODE_PRIVATE)
 
-    private val dateFmt = DateTimeFormatter.ofPattern("yyyy-MM-dd")
+    private val dateFmt = DateTimeFormatter.ofPattern("yyyy-MM-dd", java.util.Locale.US)
 
     // ── Seed ─────────────────────────────────────────────────────────────────
 
     /**
-     * Called once on first launch. Writes realistic-looking simulated
-     * screen-time and interception data for the past 30 days so the stats
-     * screen is never empty during a demo.
+     * Called whenever the stats screen is loaded. Fills in missing "fake"
+     * statistics for any days between the last launch and today.
+     * On first launch, seeds 30 days of data.
      */
     fun seedIfNeeded() {
-        if (prefs.getBoolean(KEY_SEEDED, false)) return
-
         val today = LocalDate.now()
-        //val installedApps = getInstalledAppPackages()
-        // Seed 30 days of screen-time (hours, as Float stored as Int*10)
+        val lastUpdateStr = prefs.getString(KEY_LAST_UPDATE_DATE, null)
+        val lastUpdate = if (lastUpdateStr != null) {
+            try { LocalDate.parse(lastUpdateStr, dateFmt) } catch (e: Exception) { null }
+        } else null
+
+        if (lastUpdate != null && !(lastUpdate.isBefore(today))) return
+
+        // If never seeded, go back 29 days. Otherwise, go back to day after lastUpdate.
+        val daysToSeed = if (lastUpdate == null) 29 else {
+            java.time.temporal.ChronoUnit.DAYS.between(lastUpdate, today).toInt().coerceAtMost(30)
+        }
+
+        if (daysToSeed <= 0) return
+
         val screenTimeTemplate = listOf(3.1f, 2.4f, 4.0f, 2.8f, 1.9f, 3.5f, 2.2f)
-        for (i in 29 downTo 0) {
-            val date = today.minusDays(i.toLong())
-            val baseHours = screenTimeTemplate[date.dayOfWeek.value % 7]
-            val jitter = (-0.4f..0.4f).random()
-            val totalHours = (baseHours + jitter).coerceAtLeast(0.5f)
-            setScreenTime(date, totalHours)
 
-            // Split screen time among apps
-            /*if (installedApps.isNotEmpty()) {
-                seedAppUsageForDay(date, totalHours, installedApps)
-            }*/
+        prefs.edit {
+            for (i in daysToSeed downTo 0) {
+                val date = today.minusDays(i.toLong())
+                
+                // Only seed if we don't have data for this day yet (to avoid overwriting real records)
+                if (getScreenTime(date) < 0) {
+                    val baseHours = screenTimeTemplate[date.dayOfWeek.value % 7]
+                    val jitter = (-0.4f..0.4f).random()
+                    val totalHours = (baseHours + jitter).coerceAtLeast(0.5f)
+                    putInt(screenKey(date), (totalHours * 10).roundToInt())
+                }
+
+                if (prefs.getInt(interKey(date), -1) < 0) {
+                    // Seed interception / resist history (don't seed for "today" yet to let real data come in)
+                    if (date.isBefore(today)) {
+                        val interceptions = (0..7).random()
+                        val resisted = (interceptions * 0.55).roundToInt().coerceAtMost(interceptions)
+                        putInt(interKey(date), interceptions)
+                        putInt(resistKey(date), resisted)
+                        if (resisted > 0) putBoolean(streakKey(date), true)
+                    }
+                }
+            }
+            putString(KEY_LAST_UPDATE_DATE, today.format(dateFmt))
+            putBoolean(KEY_SEEDED, true)
         }
-
-        // Seed interception / resist history for past 30 days
-        for (i in 29 downTo 1) {
-            val date = today.minusDays(i.toLong())
-            val interceptions = (0..7).random()
-            val resisted      = (interceptions * 0.55).roundToInt()
-                .coerceAtMost(interceptions)
-            setDayInterceptions(date, interceptions, resisted)
-
-            // Mark streak days (resisted at least once)
-            if (resisted > 0) markStreakDay(date)
-
-            // Seed calendar events (0-3) if there were interceptions/resists
-            //seedEventsForDay(date, (interceptions > 0 || resisted > 0))
-        }
-
-        // Seed streak-days set
-        prefs.edit { putBoolean(KEY_SEEDED, true) }
     }
 
     // ── Screen time ───────────────────────────────────────────────────────────
-
-    fun setScreenTime(date: LocalDate, hours: Float) {
-        prefs.edit { putInt(screenKey(date), (hours * 10).roundToInt()) }
-    }
 
     fun getScreenTime(date: LocalDate): Float =
         prefs.getInt(screenKey(date), -1).let {
@@ -252,7 +254,9 @@ class StatsRepository(private val context: Context) {
         // Group by package name and sum up time
         val usageMap = stats.groupBy { it.packageName }
             .mapValues { entry -> entry.value.sumOf { it.totalTimeInForeground } }
-            .filter { it.value > 0 }
+            .filter { (pkg, time) -> 
+                time > 0 && pkg != "com.nothing.launcher" 
+            }
             .toList()
             .sortedByDescending { it.second }
             .take(limit)
@@ -299,7 +303,7 @@ class StatsRepository(private val context: Context) {
             .mapValues { (dow, total) -> total / (counts[dow] ?: 1) }
             .maxByOrNull { it.value }
             ?.key
-            ?.getDisplayName(java.time.format.TextStyle.FULL, java.util.Locale.getDefault())
+            ?.getDisplayName(java.time.format.TextStyle.FULL, java.util.Locale.ENGLISH)
             ?: "Wednesday"
     }
 
@@ -315,6 +319,7 @@ class StatsRepository(private val context: Context) {
     companion object {
         private const val PREF_FILE      = "timewise_stats"
         private const val KEY_SEEDED     = "seeded"
+        private const val KEY_LAST_UPDATE_DATE = "last_update_date"
         const val MINS_PER_RESIST        = 20   // avg session length assumed saved
     }
 }

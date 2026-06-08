@@ -43,7 +43,7 @@ class StatsViewModel(app: Application) : AndroidViewModel(app) {
     private val _uiState = MutableStateFlow(StatsUiState())
     val uiState: StateFlow<StatsUiState> = _uiState.asStateFlow()
 
-    private val dayFmt = DateTimeFormatter.ofPattern("EEE")
+    private val dayFmt = DateTimeFormatter.ofPattern("EEE", java.util.Locale.ENGLISH)
 
     init { load() }
 

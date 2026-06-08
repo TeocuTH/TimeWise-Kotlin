@@ -24,9 +24,9 @@
 
     <application
         android:allowBackup="true"
-        android:icon="@mipmap/ic_launcher"
+        android:icon="@mipmap/timewiseicon"
         android:label="@string/app_name"
-        android:roundIcon="@mipmap/ic_launcher_round"
+        android:roundIcon="@mipmap/timewiseicon_round"
         android:supportsRtl="true"
         android:theme="@style/Theme.Timewise">
 
@@ -66,6 +66,15 @@
             <property
                 android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
                 android:value="monitorFocusSession" />
+        </service>
+
+        <service
+            android:name=".TimewiseNotificationListenerService"
+            android:exported="false"
+            android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE">
+            <intent-filter>
+                <action android:name="android.service.notification.NotificationListenerService" />
+            </intent-filter>
         </service>
 
         <!-- Auto-restart service on boot -->

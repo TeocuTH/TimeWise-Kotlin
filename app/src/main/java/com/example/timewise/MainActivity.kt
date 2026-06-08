@@ -18,6 +18,7 @@ import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import android.content.ComponentName
 import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -155,6 +156,7 @@ private fun PermissionSetupDialog(
     var hasUsage   by remember { mutableStateOf(hasUsagePermission(context)) }
     var hasOverlay by remember { mutableStateOf(Settings.canDrawOverlays(context)) }
     var hasBattery by remember { mutableStateOf(hasBatteryOptimizationExemption(context)) }
+    var hasNotif   by remember { mutableStateOf(isNotificationServiceEnabled(context)) }
 
     // Re-check on every onResume (returning from Settings)
     DisposableEffect(lifecycleOwner) {
@@ -163,6 +165,7 @@ private fun PermissionSetupDialog(
                 hasUsage   = hasUsagePermission(context)
                 hasOverlay = Settings.canDrawOverlays(context)
                 hasBattery = hasBatteryOptimizationExemption(context)
+                hasNotif   = isNotificationServiceEnabled(context)
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
@@ -170,7 +173,7 @@ private fun PermissionSetupDialog(
     }
 
     // Launchers must be at the top level of the composable, not inside a lambda
-    val allGranted = hasUsage && hasOverlay && hasBattery
+    val allGranted = hasUsage && hasOverlay && hasBattery && hasNotif
 
     AlertDialog(
         onDismissRequest = { /* blocked until all granted */ },
@@ -199,12 +202,16 @@ private fun PermissionSetupDialog(
                             android.R.anim.fade_in,
                             android.R.anim.fade_out
                         ).toBundle()
-                        context.startActivity(
-                            Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS).apply {
-                                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                            },
-                            options
-                        )
+                        val intent = Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS).apply {
+                            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                            data = Uri.parse("package:" + context.packageName)
+                        }
+                        try {
+                            context.startActivity(intent, options)
+                        } catch (e: Exception) {
+                            intent.data = null
+                            context.startActivity(intent, options)
+                        }
                         pollAndReturn(context) { hasUsagePermission(context) }
                     }
                 )
@@ -244,6 +251,7 @@ private fun PermissionSetupDialog(
                                         Uri.parse("package:" + context.packageName)
                                     )
                                 )
+                                pollAndReturn(context) { hasBatteryOptimizationExemption(context) }
                             } catch (e: Exception) {
                                 val options = ActivityOptions.makeCustomAnimation(
                                     context,
@@ -259,6 +267,26 @@ private fun PermissionSetupDialog(
                                 pollAndReturn(context) { hasBatteryOptimizationExemption(context) }
                             }
                         }
+                    }
+                )
+                PermissionItem(
+                    icon     = Icons.Outlined.Notifications,
+                    title    = "Notification access",
+                    subtitle = "Hides notifications from blocked apps",
+                    granted  = hasNotif,
+                    onClick  = {
+                        val options = ActivityOptions.makeCustomAnimation(
+                            context,
+                            android.R.anim.fade_in,
+                            android.R.anim.fade_out
+                        ).toBundle()
+                        context.startActivity(
+                            Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS).apply {
+                                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                            },
+                            options
+                        )
+                        pollAndReturn(context) { isNotificationServiceEnabled(context) }
                     }
                 )
             }
@@ -337,7 +365,23 @@ private fun PermissionItem(
 private fun allPermissionsGranted(context: Context) =
     hasUsagePermission(context) &&
     Settings.canDrawOverlays(context) &&
-    hasBatteryOptimizationExemption(context)
+    hasBatteryOptimizationExemption(context) &&
+    isNotificationServiceEnabled(context)
+
+private fun isNotificationServiceEnabled(context: Context): Boolean {
+    val pkgName = context.packageName
+    val flat = Settings.Secure.getString(context.contentResolver, "enabled_notification_listeners")
+    if (flat != null) {
+        val names = flat.split(":").toTypedArray()
+        for (name in names) {
+            val cn = ComponentName.unflattenFromString(name)
+            if (cn != null && pkgName == cn.packageName) {
+                return true
+            }
+        }
+    }
+    return false
+}
 
 private fun hasUsagePermission(context: Context): Boolean {
     val ops  = context.getSystemService(Context.APP_OPS_SERVICE) as AppOpsManager

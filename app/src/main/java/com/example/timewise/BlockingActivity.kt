@@ -1,7 +1,7 @@
 package com.example.timewise
 
 import android.content.Intent
-import android.graphics.drawable.Drawable
+import androidx.compose.ui.draw.scale
 import android.os.Bundle
 import android.os.CountDownTimer
 import android.os.Handler
@@ -24,6 +24,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -41,14 +42,13 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.core.graphics.drawable.toBitmap
 import com.example.timewise.ui.theme.TimewiseTheme
-import androidx.compose.foundation.layout.fillMaxSize
+import com.example.timewise.R
 
 /**
  * Stays a separate Activity so Android can launch it over foreign apps.
@@ -67,16 +67,12 @@ class BlockingActivity : ComponentActivity() {
         val blockedPackage = intent.getStringExtra(EXTRA_BLOCKED_PACKAGE)
             ?: AppMonitorService.instance?.lastBlockedPackage
 
-        val appName = resolveAppName(blockedPackage)
-        val appIcon = resolveAppIcon(blockedPackage)
         val message = pickMessage(blockedPackage)
         val delayMs = prefs.delayMillis
 
         setContent {
             TimewiseTheme(darkTheme = true) {
                 BlockingScreen(
-                    appName = appName,
-                    appIcon = appIcon,
                     message = message,
                     delayMs = delayMs,
                     onResist = { recordAndClose(resisted = true) },
@@ -92,6 +88,18 @@ class BlockingActivity : ComponentActivity() {
     @Deprecated("Deprecated in Java")
     override fun onBackPressed() {
         recordAndClose(resisted = true)
+    }
+
+    override fun onStop() {
+        super.onStop()
+        // If the activity is being stopped and it's not due to a rotation
+        // or an explicit finish() call (from the buttons), it means the user
+        // left the overlay (Home button, app switcher, or notification).
+        if (!isChangingConfigurations && !isFinishing) {
+            // Count this as a "resisted" attempt since they left the blocked app.
+            prefs.recordInterception(resisted = true)
+            finish()
+        }
     }
 
     private fun recordAndClose(resisted: Boolean) {
@@ -111,7 +119,7 @@ class BlockingActivity : ComponentActivity() {
     private fun openApp(packageName: String?) {
         if (packageName == null) return
 
-        AppMonitorService.pause(this, prefs.gracePeriodMillis)
+        AppMonitorService.pause(this, packageName)
 
         Handler(Looper.getMainLooper()).postDelayed({
             packageManager.getLaunchIntentForPackage(packageName)?.apply {
@@ -119,28 +127,6 @@ class BlockingActivity : ComponentActivity() {
                 startActivity(this)
             }
         }, 300)
-    }
-
-    private fun resolveAppName(pkg: String?): String {
-        if (pkg == null) return "this app"
-
-        return try {
-            val info = packageManager.getApplicationInfo(pkg, 0)
-            packageManager.getApplicationLabel(info).toString()
-        } catch (e: Exception) {
-            pkg
-        }
-    }
-
-    private fun resolveAppIcon(pkg: String?): Drawable? {
-        if (pkg == null) return null
-
-        return try {
-            val info = packageManager.getApplicationInfo(pkg, 0)
-            packageManager.getApplicationIcon(info)
-        } catch (e: Exception) {
-            null
-        }
     }
 
     private fun pickMessage(pkg: String?): String {
@@ -197,8 +183,6 @@ class BlockingActivity : ComponentActivity() {
 
 @Composable
 fun BlockingScreen(
-    appName: String,
-    appIcon: Drawable?,
     message: String,
     delayMs: Long,
     onResist: () -> Unit,
@@ -257,47 +241,19 @@ fun BlockingScreen(
                 .fillMaxWidth()
         ) {
             Box(
-                modifier = Modifier.size(72.dp),
+                modifier = Modifier
+                    .size(72.dp)
+                    .background(Color(0xFF6C63FF), shape = CircleShape),
                 contentAlignment = Alignment.Center
             ) {
-                if (appIcon != null) {
-                    Image(
-                        bitmap = appIcon.toBitmap(width = 128, height = 128).asImageBitmap(),
-                        contentDescription = "$appName icon",
-                        modifier = Modifier.fillMaxSize()
-                    )
-
-                    Box(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .background(Color.Black.copy(alpha = 0.25f))
-                    )
-                } else {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .background(Color.Black.copy(alpha = 0.25f))
-                    )
-                }
-
-                Text(
-                    text = "II",
-                    fontSize = 46.sp,
-                    color = Color.White.copy(alpha = 0.95f),
-                    textAlign = TextAlign.Center
+                Image(
+                    painter = painterResource(id = R.mipmap.timewiseicon_foreground),
+                    contentDescription = "Timewise icon",
+                    modifier = Modifier.size(72.dp).scale(1.45f)
                 )
             }
 
-            Spacer(Modifier.height(12.dp))
-
-            Text(
-                text = appName,
-                style = MaterialTheme.typography.labelLarge,
-                color = Color(0xFF9B9BA8),
-                textAlign = TextAlign.Center
-            )
-
-            Spacer(Modifier.height(8.dp))
+            Spacer(Modifier.height(16.dp))
 
             Text(
                 text = if (countdownDone) {

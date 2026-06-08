@@ -5,6 +5,7 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.app.Service
+import android.app.usage.UsageEvents
 import android.app.usage.UsageStatsManager
 import android.content.Context
 import android.content.Intent
@@ -33,10 +34,13 @@ class AppMonitorService : Service() {
     private lateinit var calendarRepo: CalendarRepository
     private val handler = Handler(Looper.getMainLooper())
 
-    private var pauseUntil = 0L
+    private var whitelistedPackage: String? = null
+    private var whitelistedPackageEntered = false
     var lastBlockedPackage: String? = null
         private set
     private var overlayVisible = false
+    private var foregroundPackage: String? = null
+    private var lastUsageEventTime = 0L
 
     private var calendarBlockedApps: Set<String> = emptySet()
 
@@ -51,8 +55,6 @@ class AppMonitorService : Service() {
     }
 
     private fun poll() {
-        if (System.currentTimeMillis() < pauseUntil) return
-
         // 1. Calendar blocks — always active
         refreshCalendarBlocks()
 
@@ -62,31 +64,101 @@ class AppMonitorService : Service() {
             ?: emptySet()
 
         val allBlocked = calendarBlockedApps + sessionApps
-        if (allBlocked.isEmpty()) { overlayVisible = false; return }
 
         val usm = getSystemService(USAGE_STATS_SERVICE) as UsageStatsManager
         val now = System.currentTimeMillis()
+        val detectedForeground = currentForegroundPackage(usm, now)
 
-        val foreground = usm
-            .queryUsageStats(UsageStatsManager.INTERVAL_DAILY, now - WINDOW_MS, now)
-            ?.filter { it.lastTimeUsed > 0 }
-            ?.maxByOrNull { it.lastTimeUsed }
-            ?.packageName ?: return
+        if (allBlocked.isEmpty()) {
+            overlayVisible = false
+            whitelistedPackage = null
+            return
+        }
 
-        if (foreground == packageName) { overlayVisible = false; return }
+        val foreground = detectedForeground ?: run {
+            // We don't clear the whitelist just because foreground is null (poll interval gap)
+            overlayVisible = false
+            return
+        }
 
-        if (allBlocked.contains(foreground) && !overlayVisible) {
-            overlayVisible = true
-            lastBlockedPackage = foreground
-            startActivity(
-                Intent(this, BlockingActivity::class.java).apply {
-                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
-                    putExtra(BlockingActivity.EXTRA_BLOCKED_PACKAGE, foreground)
+        val isHomeOrSelf = foreground == packageName || isLauncher(foreground)
+
+        // "Open anyway" allows the app only for its current foreground visit.
+        // UsageEvents keeps Home transitions from being mistaken for the blocked app.
+        if (whitelistedPackage != null) {
+            when {
+                foreground == whitelistedPackage -> {
+                    whitelistedPackageEntered = true
+                    overlayVisible = false
+                    return
                 }
-            )
-        } else if (!allBlocked.contains(foreground)) {
+                !whitelistedPackageEntered && isHomeOrSelf -> {
+                    overlayVisible = false
+                    return
+                }
+                else -> {
+                    clearWhitelist()
+                }
+            }
+        }
+
+        if (allBlocked.contains(foreground) && !isHomeOrSelf) {
+            if (!overlayVisible) {
+                overlayVisible = true
+                lastBlockedPackage = foreground
+                startActivity(
+                    Intent(this, BlockingActivity::class.java).apply {
+                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+                        putExtra(BlockingActivity.EXTRA_BLOCKED_PACKAGE, foreground)
+                    }
+                )
+            }
+        } else {
             overlayVisible = false
         }
+    }
+
+    private fun currentForegroundPackage(usm: UsageStatsManager, now: Long): String? {
+        val start = if (lastUsageEventTime > 0L) lastUsageEventTime else now - WINDOW_MS
+        val events = usm.queryEvents(start, now)
+        val event = UsageEvents.Event()
+
+        while (events.hasNextEvent()) {
+            events.getNextEvent(event)
+            lastUsageEventTime = event.timeStamp + 1
+
+            when (event.eventType) {
+                UsageEvents.Event.MOVE_TO_FOREGROUND -> {
+                    val newPkg = event.packageName
+                    // If a NEW package comes to foreground that isn't the current whitelisted one,
+                    // and isn't a "transitional" package (launcher/self), clear the whitelist.
+                    if (whitelistedPackage != null && whitelistedPackageEntered) {
+                        if (newPkg != whitelistedPackage && !isLauncher(newPkg) && newPkg != packageName) {
+                            clearWhitelist()
+                        }
+                    }
+                    foregroundPackage = newPkg
+                }
+                UsageEvents.Event.MOVE_TO_BACKGROUND -> {
+                    if (foregroundPackage == event.packageName) {
+                        foregroundPackage = null
+                    }
+                }
+            }
+        }
+
+        return foregroundPackage
+    }
+
+    private fun clearWhitelist() {
+        whitelistedPackage = null
+        whitelistedPackageEntered = false
+    }
+
+    private fun isLauncher(pkg: String): Boolean {
+        val intent = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME)
+        val resolveInfo = packageManager.resolveActivity(intent, 0)
+        return resolveInfo?.activityInfo?.packageName == pkg
     }
 
     private fun refreshCalendarBlocks() {
@@ -105,8 +177,8 @@ class AppMonitorService : Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
             ACTION_PAUSE -> {
-                val ms = intent.getLongExtra(EXTRA_PAUSE_MS, prefs.gracePeriodMillis)
-                pauseUntil = System.currentTimeMillis() + ms
+                whitelistedPackage = intent.getStringExtra(EXTRA_PAUSE_PACKAGE)
+                whitelistedPackageEntered = false
                 overlayVisible = false
             }
             ACTION_STOP -> {
@@ -158,15 +230,15 @@ class AppMonitorService : Service() {
         const val ACTION_PAUSE            = "com.example.timewise.ACTION_PAUSE"
         const val ACTION_STOP             = "com.example.timewise.ACTION_STOP"
         const val ACTION_REFRESH_CALENDAR = "com.example.timewise.ACTION_REFRESH_CALENDAR"
-        const val EXTRA_PAUSE_MS          = "pause_ms"
+        const val EXTRA_PAUSE_PACKAGE     = "pause_package"
 
         @Volatile var instance: AppMonitorService? = null
 
-        fun pause(context: Context, durationMs: Long) {
+        fun pause(context: Context, packageName: String?) {
             context.startService(
                 Intent(context, AppMonitorService::class.java).apply {
                     action = ACTION_PAUSE
-                    putExtra(EXTRA_PAUSE_MS, durationMs)
+                    putExtra(EXTRA_PAUSE_PACKAGE, packageName)
                 }
             )
         }

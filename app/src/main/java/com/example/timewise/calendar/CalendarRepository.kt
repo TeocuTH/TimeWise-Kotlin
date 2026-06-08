@@ -30,7 +30,9 @@ class CalendarRepository(context: Context) {
     }
 
     fun loadForDate(date: String): List<CalendarEvent> =
-        loadAll().filter { it.date == date }.sortedBy { it.startTime }
+        loadAll().filter { 
+            date >= it.startDate && date <= it.endDate 
+        }.sortedBy { it.startTime }
 
     // ── Write ─────────────────────────────────────────────────────────────────
 
@@ -59,11 +61,20 @@ class CalendarRepository(context: Context) {
      * based on all active events for today.
      */
     fun currentlyBlockedApps(nowDate: String, nowTime: String): Set<String> {
-        return loadForDate(nowDate)
-            .filter { event ->
-                nowTime >= event.startTime && nowTime < event.endTime
+        return loadAll().filter { event ->
+            if (nowDate < event.startDate || nowDate > event.endDate) return@filter false
+            
+            val isStartDay = nowDate == event.startDate
+            val isEndDay = nowDate == event.endDate
+            
+            when {
+                isStartDay && isEndDay -> nowTime >= event.startTime && nowTime < event.endTime
+                isStartDay -> nowTime >= event.startTime
+                isEndDay -> nowTime < event.endTime
+                else -> true // Middle day
             }
-            .flatMap { it.blockedApps }
-            .toSet()
+        }
+        .flatMap { it.blockedApps }
+        .toSet()
     }
 }
