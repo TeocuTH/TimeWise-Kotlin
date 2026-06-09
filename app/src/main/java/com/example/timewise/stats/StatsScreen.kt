@@ -647,7 +647,7 @@ private fun AppUsageBarRow(app: AppUsageInfo, maxUsage: Long) {
                     maxLines = 1
                 )
                 Text(
-                    if (hours >= 1f) "%.1fh %dm".format(hours, minutes) else "${minutes}m",
+                    if (hours >= 1f) "%dh %dm".format(hours.toInt(), minutes) else "${minutes}m",
                     style = MaterialTheme.typography.labelSmall,
                     fontSize = 12.sp,
                     color = Purple,
