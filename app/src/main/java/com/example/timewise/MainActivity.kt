@@ -181,7 +181,7 @@ private fun PermissionSetupDialog(
         shape = RoundedCornerShape(20.dp),
         title = {
             Column {
-                Text("Set up Timewise", fontWeight = FontWeight.Bold)
+                Text("Permissions required", fontWeight = FontWeight.Bold)
                 Text(
                     "Grant these permissions so blocking works correctly.",
                     style    = MaterialTheme.typography.bodySmall,
