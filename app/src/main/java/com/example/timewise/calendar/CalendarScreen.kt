@@ -54,6 +54,7 @@ fun CalendarScreen(vm: CalendarViewModel = viewModel()) {
     }
 
     Scaffold(
+        containerColor = MaterialTheme.colorScheme.background,
         topBar = {
             TopAppBar(
                 title = { Text("Calendar", fontWeight = FontWeight.SemiBold) },
@@ -77,6 +78,7 @@ fun CalendarScreen(vm: CalendarViewModel = viewModel()) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
+                .background(MaterialTheme.colorScheme.background)
                 .padding(padding)
         ) {
             DateHeader(
@@ -91,6 +93,8 @@ fun CalendarScreen(vm: CalendarViewModel = viewModel()) {
             Box(
                 modifier = Modifier
                     .weight(1f)
+                    .fillMaxWidth()
+                    .background(MaterialTheme.colorScheme.background)
                     .pointerInput(state.viewMode, state.selectedDate) {
                         var totalDrag = 0f
                         detectHorizontalDragGestures(
@@ -538,7 +542,7 @@ private fun DayTimeline(
                                 .align(Alignment.TopStart)
                                 .offset(x = (-2).dp, y = (-2).dp)
                                 .background(Color(0xFF6C63FF), CircleShape)
-                                .border(1.dp, Color.White, CircleShape)
+                                .border(1.dp, MaterialTheme.colorScheme.background, CircleShape)
                         )
                         Box(
                             Modifier
@@ -546,7 +550,7 @@ private fun DayTimeline(
                                 .align(Alignment.BottomEnd)
                                 .offset(x = 2.dp, y = 2.dp)
                                 .background(Color(0xFF6C63FF), CircleShape)
-                                .border(1.dp, Color.White, CircleShape)
+                                .border(1.dp, MaterialTheme.colorScheme.background, CircleShape)
                         )
                     }
                 }
@@ -565,12 +569,12 @@ private fun DayTimeline(
                     Box(
                         modifier = Modifier
                             .size(10.dp)
-                            .background(Color.Black, CircleShape)
+                            .background(MaterialTheme.colorScheme.onBackground, CircleShape)
                     )
                     HorizontalDivider(
                         modifier = Modifier.weight(1f),
                         thickness = 2.dp,
-                        color = Color.Black
+                        color = MaterialTheme.colorScheme.onBackground
                     )
                 }
             }
@@ -599,7 +603,7 @@ private fun DayEventItem(
                 text = event.title.ifBlank { "Untitled" },
                 style = MaterialTheme.typography.labelLarge,
                 fontWeight = FontWeight.Bold,
-                color = Color.White,
+                color = MaterialTheme.colorScheme.background,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
@@ -607,7 +611,7 @@ private fun DayEventItem(
                 Text(
                     text = event.description,
                     style = MaterialTheme.typography.labelSmall,
-                    color = Color.White.copy(alpha = 0.8f),
+                    color = MaterialTheme.colorScheme.background.copy(alpha = 0.8f),
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
@@ -812,7 +816,7 @@ private fun WeekTimeline(
                                         .height(boxHeight)
                                         .clip(RoundedCornerShape(4.dp))
                                         .background(Color(event.color.accentHex))
-                                        .border(1.dp, Color.White.copy(alpha = 0.5f), RoundedCornerShape(4.dp))
+                                        .border(1.dp, MaterialTheme.colorScheme.background.copy(alpha = 0.5f), RoundedCornerShape(4.dp))
                                         .clickable { onTap(event) }
                                         .padding(horizontal = 5.dp, vertical = 2.dp)
                                 ) {
@@ -821,7 +825,7 @@ private fun WeekTimeline(
                                             text = event.title,
                                             style = MaterialTheme.typography.labelSmall,
                                             fontSize = 9.sp,
-                                            color = Color.White,
+                                            color = MaterialTheme.colorScheme.background,
                                             fontWeight = FontWeight.Bold,
                                             maxLines = 2,
                                             overflow = TextOverflow.Ellipsis
@@ -856,7 +860,7 @@ private fun WeekTimeline(
                                             .align(Alignment.TopStart)
                                             .offset(x = (-2).dp, y = (-2).dp)
                                             .background(Color(0xFF6C63FF), CircleShape)
-                                            .border(1.dp, Color.White, CircleShape)
+                                            .border(1.dp, MaterialTheme.colorScheme.background, CircleShape)
                                     )
                                     Box(
                                         Modifier
@@ -864,7 +868,7 @@ private fun WeekTimeline(
                                             .align(Alignment.BottomEnd)
                                             .offset(x = 2.dp, y = 2.dp)
                                             .background(Color(0xFF6C63FF), CircleShape)
-                                            .border(1.dp, Color.White, CircleShape)
+                                            .border(1.dp, MaterialTheme.colorScheme.background, CircleShape)
                                     )
                                 }
                             }
@@ -883,12 +887,12 @@ private fun WeekTimeline(
                                 Box(
                                     modifier = Modifier
                                         .size(8.dp)
-                                        .background(Color.Black, CircleShape)
+                                        .background(MaterialTheme.colorScheme.onBackground, CircleShape)
                                 )
                                 HorizontalDivider(
                                     modifier = Modifier.weight(1f),
                                     thickness = 1.5.dp,
-                                    color = Color.Black
+                                    color = MaterialTheme.colorScheme.onBackground
                                 )
                             }
                         }

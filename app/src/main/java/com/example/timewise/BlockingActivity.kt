@@ -47,7 +47,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.example.timewise.ui.theme.TimewiseTheme
+import com.example.timewise.ui.theme.TimeWiseTheme
 import com.example.timewise.R
 
 /**
@@ -71,7 +71,7 @@ class BlockingActivity : ComponentActivity() {
         val delayMs = prefs.delayMillis
 
         setContent {
-            TimewiseTheme(darkTheme = true) {
+            TimeWiseTheme(darkTheme = true) {
                 BlockingScreen(
                     message = message,
                     delayMs = delayMs,
@@ -263,7 +263,7 @@ fun BlockingScreen(
                 },
                 style = MaterialTheme.typography.titleLarge,
                 fontWeight = FontWeight.SemiBold,
-                color = Color.White,
+                color = MaterialTheme.colorScheme.background,
                 textAlign = TextAlign.Center
             )
 
@@ -313,7 +313,7 @@ fun BlockingScreen(
                     ),
                     shape = RoundedCornerShape(12.dp)
                 ) {
-                    Text("Stay focused", color = Color.White)
+                    Text("Stay focused", color = MaterialTheme.colorScheme.background)
                 }
 
                 OutlinedButton(

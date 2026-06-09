@@ -43,7 +43,7 @@ import androidx.navigation.compose.rememberNavController
 import com.example.timewise.calendar.CalendarScreen
 import com.example.timewise.stats.StatsScreen
 import com.example.timewise.ui.AppSelectionScreen
-import com.example.timewise.ui.theme.TimewiseTheme
+import com.example.timewise.ui.theme.TimeWiseTheme
 
 private val Purple      = Color(0xFF6C63FF)
 private val PurpleLight = Color(0xFFEDECFF)
@@ -53,7 +53,7 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         setContent {
-            TimewiseTheme {
+            TimeWiseTheme {
                 Surface(
                     modifier = Modifier.fillMaxSize(),
                     color    = MaterialTheme.colorScheme.background,
@@ -113,8 +113,9 @@ fun TimewiseApp() {
     }
 
     Scaffold(
+        containerColor = MaterialTheme.colorScheme.background,
         bottomBar = {
-            NavigationBar {
+            NavigationBar(containerColor = MaterialTheme.colorScheme.surface) {
                 bottomNavScreens.forEach { screen ->
                     NavigationBarItem(
                         selected = currentDest?.hierarchy?.any { it.route == screen.route } == true,

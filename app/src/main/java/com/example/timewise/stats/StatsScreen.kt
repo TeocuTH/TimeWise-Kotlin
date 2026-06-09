@@ -33,11 +33,17 @@ import kotlin.math.abs
 import kotlin.math.roundToInt
 
 // ── Brand colours (matching TimewiseTheme) ────────────────────────────────────
-private val Purple     = Color(0xFF6C63FF)
-private val PurpleLight= Color(0xFFEDECFF)
-private val PurpleMid  = Color(0xFFAFA9EC)
-private val Teal       = Color(0xFF1D9E75)
+private val Purple     = Color(0xFF5A5A57)
+private val GreyLight= Color(0xFFEAEAE5)
+private val PurpleMid  = Color(0xFF9D9D99)
 private val TealLight  = Color(0xFFE1F5EE)
+private val MatchaMedium = Color(0xFFBAC981)
+
+private val Matcha = Color(0xFF768050)
+
+private val MatchaDark = Color(0xFF555C38)
+private val MatchaLight = Color(0xFFEFF5D7)
+
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -69,6 +75,7 @@ fun StatsScreen(vm: StatsViewModel = viewModel()) {
     }
 
     Scaffold(
+        containerColor = MaterialTheme.colorScheme.background,
         topBar = {
             TopAppBar(
                 title = { Text("Your progress", fontWeight = FontWeight.SemiBold) },
@@ -146,10 +153,10 @@ private fun MetricRow(state: StatsUiState) {
             modifier = Modifier.weight(1f),
             icon = if (!state.hasUsagePermission) Icons.Outlined.Lock else null,
             appIcon = topAppIcon,
-            unitColor = if (!state.hasUsagePermission) Color.White else MaterialTheme.colorScheme.onSurfaceVariant
+            unitColor = if (!state.hasUsagePermission) MaterialTheme.colorScheme.background else MaterialTheme.colorScheme.onSurfaceVariant
         )
         MetricCell("Blocked",     "${state.weekInterceptions}", "this week", MaterialTheme.colorScheme.onSurface, Modifier.weight(1f))
-        MetricCell("Resisted",    "$resistPct%",             "rate",  Teal,    Modifier.weight(1f))
+        MetricCell("Resisted",    "$resistPct%",             "rate",  Matcha,    Modifier.weight(1f))
     }
 }
 
@@ -248,21 +255,21 @@ private fun HoursSavedCard(minutesSaved: Int) {
 
     Card(
         shape  = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = PurpleLight),
-        border = BorderStroke(0.5.dp, PurpleMid),
+        colors = CardDefaults.cardColors(containerColor = MatchaLight),
+        border = BorderStroke(0.5.dp, MatchaMedium),
     ) {
         Column(Modifier.padding(20.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(
                     Icons.Outlined.Timer, contentDescription = null,
-                    tint     = Purple,
+                    tint     = Matcha,
                     modifier = Modifier.size(20.dp)
                 )
                 Spacer(Modifier.width(8.dp))
                 Text(
                     "Time reclaimed",
                     style  = MaterialTheme.typography.labelMedium,
-                    color  = Purple,
+                    color  = MatchaDark,
                     fontWeight = FontWeight.SemiBold,
                 )
             }
@@ -273,14 +280,14 @@ private fun HoursSavedCard(minutesSaved: Int) {
                 equiv,
                 fontSize   = 44.sp,
                 fontWeight = FontWeight.Bold,
-                color      = Purple,
+                color      = MatchaDark,
                 lineHeight = 48.sp,
             )
             Text(
                 equivLabel,
                 style = MaterialTheme.typography.bodyMedium,
                 fontSize = 16.sp,
-                color = Color(0xFF534AB7),
+                color = Matcha,
             )
 
             if (days >= 1f) {
@@ -288,7 +295,7 @@ private fun HoursSavedCard(minutesSaved: Int) {
                 Text(
                     "That's %.4f%% of an 80-year life.".format(lifePercent),
                     style = MaterialTheme.typography.bodySmall,
-                    color = Color(0xFF7F77DD),
+                    color = Purple,
                     fontStyle = FontStyle.Italic,
                 )
             }
@@ -300,7 +307,7 @@ private fun HoursSavedCard(minutesSaved: Int) {
                 Text(
                     "What you could do instead:",
                     style = MaterialTheme.typography.labelSmall,
-                    color = Color(0xFF534AB7),
+                    color = MatchaDark,
                 )
                 Spacer(Modifier.height(6.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -327,7 +334,7 @@ private fun EquivChip(icon: androidx.compose.ui.graphics.vector.ImageVector, lab
             .padding(horizontal = 8.dp, vertical = 4.dp),
     ) {
         Icon(icon, null, tint = Purple, modifier = Modifier.size(13.dp))
-        Text(label, style = MaterialTheme.typography.labelSmall, color = Color(0xFF3C3489))
+        Text(label, style = MaterialTheme.typography.labelSmall, color = Purple)
     }
 }
 
@@ -484,7 +491,7 @@ private fun OutcomesCard(interceptions: Int, resisted: Int) {
                         )
                         // Progress
                         drawArc(
-                            color       = Purple,
+                            color       = Matcha,
                             startAngle  = -90f,
                             sweepAngle  = 360f * animPct,
                             useCenter   = false,
@@ -506,9 +513,9 @@ private fun OutcomesCard(interceptions: Int, resisted: Int) {
                 }
 
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.weight(1f)) {
-                    OutcomeStat("Resisted",     resisted, Purple,     PurpleLight)
+                    OutcomeStat("Resisted",     resisted, Matcha,     PurpleLight)
                     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-                    OutcomeStat("Opened anyway", opened,  Teal,       TealLight)
+                    OutcomeStat("Opened anyway", opened,  Purple,       TealLight)
                 }
             }
         }
