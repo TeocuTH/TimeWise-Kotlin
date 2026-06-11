@@ -485,9 +485,13 @@ fun AddEventSheet(
                             onClick  = { showAppPicker = !showAppPicker },
                             modifier = Modifier.align(Alignment.Start),
                         ) {
-                            Icon(Icons.Outlined.Add, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Icon(
+                                if (showAppPicker) Icons.Outlined.Remove else Icons.Outlined.Add,
+                                contentDescription = null,
+                                modifier = Modifier.size(16.dp)
+                            )
                             Spacer(Modifier.width(4.dp))
-                            Text("Add more")
+                            Text(if (showAppPicker) "Close" else "Add more")
                         }
                     }
                 }
