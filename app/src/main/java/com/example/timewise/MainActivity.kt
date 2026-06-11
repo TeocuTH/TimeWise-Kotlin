@@ -15,7 +15,9 @@ import android.provider.Settings
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import android.content.ComponentName
@@ -28,6 +30,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
@@ -104,7 +107,7 @@ fun TimewiseApp() {
     }
 
     if (showPermissionDialog) {
-        PermissionSetupDialog(
+        SequentialPermissionDialogs(
             context   = context,
             onDismiss = {
                 if (allPermissionsGranted(context)) showPermissionDialog = false
@@ -149,7 +152,7 @@ fun TimewiseApp() {
 // ── Permission dialog ─────────────────────────────────────────────────────────
 
 @Composable
-private fun PermissionSetupDialog(
+private fun SequentialPermissionDialogs(
     context: Context,
     onDismiss: () -> Unit,
 ) {
@@ -173,193 +176,183 @@ private fun PermissionSetupDialog(
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
-    // Launchers must be at the top level of the composable, not inside a lambda
     val allGranted = hasUsage && hasOverlay && hasBattery && hasNotif
+    if (allGranted) {
+        LaunchedEffect(Unit) { onDismiss() }
+        return
+    }
 
-    AlertDialog(
-        onDismissRequest = { /* blocked until all granted */ },
-        shape = RoundedCornerShape(20.dp),
-        title = {
-            Column {
-                Text("Permissions required", fontWeight = FontWeight.Bold)
-                Text(
-                    "Grant these permissions so blocking works correctly.",
-                    style    = MaterialTheme.typography.bodySmall,
-                    color    = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(top = 4.dp),
-                )
-            }
-        },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                PermissionItem(
-                    icon     = Icons.Outlined.QueryStats,
-                    title    = "Usage access",
-                    subtitle = "Detects which app is in the foreground",
-                    granted  = hasUsage,
-                    onClick  = {
-                        val options = ActivityOptions.makeCustomAnimation(
-                            context,
-                            android.R.anim.fade_in,
-                            android.R.anim.fade_out
-                        ).toBundle()
-                        val intent = Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS).apply {
+    // Determine which dialog to show
+    when {
+        !hasUsage -> {
+            SinglePermissionDialog(
+                title = "Unlock Your Insights",
+                description = "TimeWise needs Usage Access to help you identify time-sinks and process your data locally.",
+                icon = Icons.Outlined.QueryStats,
+                buttonText = "Grant Usage Access",
+                onClick = {
+                    val intent = Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS).apply {
+                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                        // Deep link to specific app page (Android 10+)
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                            data = Uri.fromParts("package", context.packageName, null)
+                        }
+                    }
+                    try {
+                        context.startActivity(intent)
+                    } catch (e: Exception) {
+                        intent.data = null
+                        context.startActivity(intent)
+                    }
+                    pollAndReturn(context) { hasUsagePermission(context) }
+                }
+            )
+        }
+        !hasOverlay -> {
+            SinglePermissionDialog(
+                title = "Enable Blocking Screen",
+                description = "To block distracting apps, TimeWise needs permission to show the focus screen on top of other apps.",
+                icon = Icons.Outlined.Layers,
+                buttonText = "Allow Overlay",
+                onClick = {
+                    val intent = Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION).apply {
+                        data = Uri.parse("package:" + context.packageName)
+                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    }
+                    try {
+                        context.startActivity(intent)
+                    } catch (e: Exception) {
+                        context.startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION).apply {
                             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                            data = Uri.parse("package:" + context.packageName)
-                        }
+                        })
+                    }
+                    pollAndReturn(context) { Settings.canDrawOverlays(context) }
+                }
+            )
+        }
+        !hasBattery -> {
+            SinglePermissionDialog(
+                title = "Stay Protected",
+                description = "Allow TimeWise to run in the background so your focus sessions aren't interrupted by battery savers.",
+                icon = Icons.Outlined.BatteryChargingFull,
+                buttonText = "Exempt from Optimization",
+                onClick = {
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
                         try {
-                            context.startActivity(intent, options)
+                            context.startActivity(
+                                Intent(
+                                    Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
+                                    Uri.parse("package:" + context.packageName)
+                                )
+                            )
+                            pollAndReturn(context) { hasBatteryOptimizationExemption(context) }
                         } catch (e: Exception) {
-                            intent.data = null
-                            context.startActivity(intent, options)
-                        }
-                        pollAndReturn(context) { hasUsagePermission(context) }
-                    }
-                )
-                PermissionItem(
-                    icon     = Icons.Outlined.Layers,
-                    title    = "Draw over other apps",
-                    subtitle = "Shows the blocking screen on top",
-                    granted  = hasOverlay,
-                    onClick  = {
-                        val options = ActivityOptions.makeCustomAnimation(
-                            context,
-                            android.R.anim.fade_in,
-                            android.R.anim.fade_out
-                        ).toBundle()
-                        context.startActivity(
-                            Intent(
-                                Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
-                                Uri.parse("package:" + context.packageName)
-                            ).apply { addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) },
-                            options
-                        )
-                        pollAndReturn(context) { Settings.canDrawOverlays(context) }
-                    }
-                )
-                PermissionItem(
-                    icon     = Icons.Outlined.BatteryChargingFull,
-                    title    = "Battery optimisation",
-                    subtitle = "Keeps the service running in the background",
-                    granted  = hasBattery,
-                    onClick  = {
-                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                            try {
-                                // No FLAG_ACTIVITY_NEW_TASK — keeps it as inline dialog
-                                context.startActivity(
-                                    Intent(
-                                        Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
-                                        Uri.parse("package:" + context.packageName)
-                                    )
-                                )
-                                pollAndReturn(context) { hasBatteryOptimizationExemption(context) }
-                            } catch (e: Exception) {
-                                val options = ActivityOptions.makeCustomAnimation(
-                                    context,
-                                    android.R.anim.fade_in,
-                                    android.R.anim.fade_out
-                                ).toBundle()
-                                context.startActivity(
-                                    Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS).apply {
-                                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                                    },
-                                    options
-                                )
-                                pollAndReturn(context) { hasBatteryOptimizationExemption(context) }
-                            }
+                            val options = ActivityOptions.makeCustomAnimation(
+                                context,
+                                android.R.anim.fade_in,
+                                android.R.anim.fade_out
+                            ).toBundle()
+                            context.startActivity(
+                                Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS).apply {
+                                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                },
+                                options
+                            )
+                            pollAndReturn(context) { hasBatteryOptimizationExemption(context) }
                         }
                     }
-                )
-                PermissionItem(
-                    icon     = Icons.Outlined.Notifications,
-                    title    = "Notification access",
-                    subtitle = "Hides notifications from blocked apps",
-                    granted  = hasNotif,
-                    onClick  = {
-                        val options = ActivityOptions.makeCustomAnimation(
-                            context,
-                            android.R.anim.fade_in,
-                            android.R.anim.fade_out
-                        ).toBundle()
+                }
+            )
+        }
+        !hasNotif -> {
+            SinglePermissionDialog(
+                title = "Silence Distractions",
+                description = "Notification access allows TimeWise to hide distracting alerts while you're in a focus session.",
+                icon = Icons.Outlined.Notifications,
+                buttonText = "Enable Notification Access",
+                onClick = {
+                    // Deep link to specific app toggle if supported (Android 11+)
+                    val intent = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                        Intent(Settings.ACTION_NOTIFICATION_LISTENER_DETAIL_SETTINGS).apply {
+                            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                            val cn = ComponentName(context, TimewiseNotificationListenerService::class.java)
+                            putExtra(Settings.EXTRA_NOTIFICATION_LISTENER_COMPONENT_NAME, cn.flattenToString())
+                        }
+                    } else {
+                        Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS).apply {
+                            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                        }
+                    }
+
+                    try {
+                        context.startActivity(intent)
+                    } catch (e: Exception) {
                         context.startActivity(
                             Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS).apply {
                                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                            },
-                            options
+                            }
                         )
-                        pollAndReturn(context) { isNotificationServiceEnabled(context) }
                     }
-                )
-            }
-        },
-        confirmButton = {
-            Button(
-                onClick  = onDismiss,
-                enabled  = allGranted,
-                colors   = ButtonDefaults.buttonColors(containerColor = Purple),
-                shape    = RoundedCornerShape(10.dp),
-            ) {
-                Text(if (allGranted) "All set — let's go!" else "Grant above to continue")
-            }
-        },
-    )
-}
-
-@Composable
-private fun PermissionItem(
-    icon: ImageVector,
-    title: String,
-    subtitle: String,
-    granted: Boolean,
-    onClick: () -> Unit,
-) {
-    Card(
-        shape   = RoundedCornerShape(12.dp),
-        colors  = CardDefaults.cardColors(
-            containerColor = if (granted) PurpleLight
-                             else MaterialTheme.colorScheme.surfaceVariant,
-        ),
-        onClick = { if (!granted) onClick() },
-    ) {
-        Row(
-            modifier          = Modifier
-                .fillMaxWidth()
-                .padding(12.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            Icon(
-                imageVector        = icon,
-                contentDescription = null,
-                tint               = if (granted) Purple
-                                     else MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier           = Modifier.size(22.dp),
-            )
-            Column(Modifier.weight(1f)) {
-                Text(
-                    text       = title,
-                    style      = MaterialTheme.typography.bodyMedium,
-                    fontWeight = FontWeight.Medium,
-                    color      = if (granted) Purple
-                                 else MaterialTheme.colorScheme.onSurface,
-                )
-                Text(
-                    text  = subtitle,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-            Icon(
-                imageVector        = if (granted) Icons.Outlined.CheckCircle
-                                     else Icons.Outlined.ChevronRight,
-                contentDescription = null,
-                tint               = if (granted) Purple
-                                     else MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier           = Modifier.size(18.dp),
+                    pollAndReturn(context) { isNotificationServiceEnabled(context) }
+                }
             )
         }
     }
 }
+
+@Composable
+private fun SinglePermissionDialog(
+    title: String,
+    description: String,
+    icon: ImageVector,
+    buttonText: String,
+    onClick: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = { /* forced */ },
+        shape = RoundedCornerShape(24.dp),
+        icon = {
+            Box(
+                modifier = Modifier
+                    .size(64.dp)
+                    .background(PurpleLight, CircleShape),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(icon, contentDescription = null, tint = Purple, modifier = Modifier.size(32.dp))
+            }
+        },
+        title = {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.headlineSmall,
+                fontWeight = FontWeight.Bold,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.fillMaxWidth()
+            )
+        },
+        text = {
+            Text(
+                text = description,
+                style = MaterialTheme.typography.bodyMedium,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.fillMaxWidth()
+            )
+        },
+        confirmButton = {
+            Button(
+                onClick = onClick,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 8.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = Purple),
+                shape = RoundedCornerShape(12.dp)
+            ) {
+                Text(buttonText, fontWeight = FontWeight.Bold)
+            }
+        }
+    )
+}
+
 
 // ── Permission helpers ────────────────────────────────────────────────────────
 
@@ -411,17 +404,15 @@ private fun pollAndReturn(context: Context, isGranted: () -> Boolean) {
     handler.post(object : Runnable {
         override fun run() {
             if (isGranted()) {
+                val intent = Intent(context, MainActivity::class.java).apply {
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)
+                }
                 val options = ActivityOptions.makeCustomAnimation(
                     context,
                     android.R.anim.fade_in,
                     android.R.anim.fade_out
                 ).toBundle()
-                context.startActivity(
-                    Intent(context, MainActivity::class.java).apply {
-                        addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)
-                    },
-                    options
-                )
+                context.startActivity(intent, options)
             } else {
                 handler.postDelayed(this, 500)
             }
