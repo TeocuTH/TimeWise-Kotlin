@@ -71,7 +71,7 @@ class BlockingActivity : ComponentActivity() {
         val delayMs = prefs.delayMillis
 
         setContent {
-            TimewiseTheme(darkTheme = true) {
+            TimewiseTheme(darkTheme = false) {
                 BlockingScreen(
                     message = message,
                     delayMs = delayMs,
@@ -223,7 +223,7 @@ fun BlockingScreen(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color(0xFF0F0F14)),
+            .background(Color.White),
         contentAlignment = Alignment.Center
     ) {
         Box(
@@ -263,7 +263,7 @@ fun BlockingScreen(
                 },
                 style = MaterialTheme.typography.titleLarge,
                 fontWeight = FontWeight.SemiBold,
-                color = Color.White,
+                color = Color.Black,
                 textAlign = TextAlign.Center
             )
 
@@ -275,7 +275,7 @@ fun BlockingScreen(
                     .fillMaxWidth()
                     .height(4.dp),
                 color = Color(0xFF6C63FF),
-                trackColor = Color(0xFF2A2A38),
+                trackColor = Color(0xFFE0E0E0),
             )
 
             Spacer(Modifier.height(32.dp))
@@ -283,7 +283,7 @@ fun BlockingScreen(
             Text(
                 text = message,
                 style = MaterialTheme.typography.bodyLarge,
-                color = Color(0xFFE0E0E8),
+                color = Color.Black,
                 textAlign = TextAlign.Center,
                 lineHeight = 26.sp
             )
@@ -294,7 +294,7 @@ fun BlockingScreen(
                 Text(
                     text = "Do you really want to open this?",
                     style = MaterialTheme.typography.bodyMedium,
-                    color = Color(0xFF9B9BA8),
+                    color = Color.Gray,
                     textAlign = TextAlign.Center
                 )
             }
@@ -322,8 +322,8 @@ fun BlockingScreen(
                     modifier = Modifier.weight(1f),
                     shape = RoundedCornerShape(12.dp),
                     colors = ButtonDefaults.outlinedButtonColors(
-                        contentColor = Color(0xFF9B9BA8),
-                        disabledContentColor = Color(0xFF4A4A58)
+                        contentColor = Color.Gray,
+                        disabledContentColor = Color.LightGray
                     )
                 ) {
                     Text("Open anyway")
