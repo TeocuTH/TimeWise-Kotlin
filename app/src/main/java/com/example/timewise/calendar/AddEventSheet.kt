@@ -124,9 +124,11 @@ fun AddEventSheet(
 
     if (showDiscardConfirm) {
         AlertDialog(
-            onDismissRequest = {
-                showDiscardConfirm = false
-            },
+            onDismissRequest = { },
+            properties = DialogProperties(
+                dismissOnBackPress = false,
+                dismissOnClickOutside = false
+            ),
             title = {
                 Text("Discard changes?")
             },

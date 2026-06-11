@@ -15,6 +15,10 @@ import android.provider.Settings
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
@@ -183,171 +187,158 @@ private fun SequentialPermissionDialogs(
     }
 
     // Determine which dialog to show
-    when {
-        !hasUsage -> {
-            SinglePermissionDialog(
-                title = "Unlock Your Insights",
-                description = "TimeWise needs Usage Access to help you identify time-sinks and process your data locally.",
-                icon = Icons.Outlined.QueryStats,
-                buttonText = "Grant Usage Access",
-                onClick = {
-                    val intent = Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS).apply {
+    val stepData = when {
+        !hasUsage -> PermissionStep(
+            id = 1,
+            title = "App Usage Permission",
+            description = "Allows Timewise to analyze your app usage locally and monitor your improvements.",
+            icon = Icons.Outlined.QueryStats,
+            buttonText = "Grant Usage Access",
+            onClick = {
+                val intent = Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS).apply {
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                        data = Uri.fromParts("package", context.packageName, null)
+                    }
+                }
+                try { context.startActivity(intent) } catch (e: Exception) { intent.data = null; context.startActivity(intent) }
+                pollAndReturn(context) { hasUsagePermission(context) }
+            }
+        )
+        !hasOverlay -> PermissionStep(
+            id = 2,
+            title = "Enable Blocking Screen",
+            description = "Allows Timewise to block distracting apps by displaying its overlay on top of them.",
+            icon = Icons.Outlined.Layers,
+            buttonText = "Allow Overlay",
+            onClick = {
+                val intent = Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION).apply {
+                    data = Uri.parse("package:" + context.packageName)
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
+                try { context.startActivity(intent) } catch (e: Exception) {
+                    context.startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION).apply { addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) })
+                }
+                pollAndReturn(context) { Settings.canDrawOverlays(context) }
+            }
+        )
+        !hasBattery -> PermissionStep(
+            id = 3,
+            title = "Disable Battery Saving",
+            description = "Keeps TimeWise running in the background so your focus sessions don't get interrupted.",
+            icon = Icons.Outlined.BatteryChargingFull,
+            buttonText = "Exclude from Optimization",
+            onClick = {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                    try {
+                        context.startActivity(Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS, Uri.parse("package:" + context.packageName)))
+                    } catch (e: Exception) {
+                        context.startActivity(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS).apply { addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) })
+                    }
+                    pollAndReturn(context) { hasBatteryOptimizationExemption(context) }
+                }
+            }
+        )
+        !hasNotif -> PermissionStep(
+            id = 4,
+            title = "Allow to Hide Notifications",
+            description = "Allows TimeWise to hide distracting alerts while you're concentrated.",
+            icon = Icons.Outlined.Notifications,
+            buttonText = "Enable Notification Access",
+            onClick = {
+                val intent = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                    Intent(Settings.ACTION_NOTIFICATION_LISTENER_DETAIL_SETTINGS).apply {
                         addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                        // Deep link to specific app page (Android 10+)
-                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                            data = Uri.fromParts("package", context.packageName, null)
-                        }
+                        val cn = ComponentName(context, TimewiseNotificationListenerService::class.java)
+                        putExtra(Settings.EXTRA_NOTIFICATION_LISTENER_COMPONENT_NAME, cn.flattenToString())
                     }
-                    try {
-                        context.startActivity(intent)
-                    } catch (e: Exception) {
-                        intent.data = null
-                        context.startActivity(intent)
-                    }
-                    pollAndReturn(context) { hasUsagePermission(context) }
+                } else {
+                    Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS).apply { addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) }
                 }
-            )
-        }
-        !hasOverlay -> {
-            SinglePermissionDialog(
-                title = "Enable Blocking Screen",
-                description = "To block distracting apps, TimeWise needs permission to show the focus screen on top of other apps.",
-                icon = Icons.Outlined.Layers,
-                buttonText = "Allow Overlay",
-                onClick = {
-                    val intent = Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION).apply {
-                        data = Uri.parse("package:" + context.packageName)
-                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                    }
-                    try {
-                        context.startActivity(intent)
-                    } catch (e: Exception) {
-                        context.startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION).apply {
-                            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                        })
-                    }
-                    pollAndReturn(context) { Settings.canDrawOverlays(context) }
+                try { context.startActivity(intent) } catch (e: Exception) {
+                    context.startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS).apply { addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) })
                 }
-            )
-        }
-        !hasBattery -> {
-            SinglePermissionDialog(
-                title = "Stay Protected",
-                description = "Allow TimeWise to run in the background so your focus sessions aren't interrupted by battery savers.",
-                icon = Icons.Outlined.BatteryChargingFull,
-                buttonText = "Exempt from Optimization",
-                onClick = {
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                        try {
-                            context.startActivity(
-                                Intent(
-                                    Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
-                                    Uri.parse("package:" + context.packageName)
-                                )
-                            )
-                            pollAndReturn(context) { hasBatteryOptimizationExemption(context) }
-                        } catch (e: Exception) {
-                            val options = ActivityOptions.makeCustomAnimation(
-                                context,
-                                android.R.anim.fade_in,
-                                android.R.anim.fade_out
-                            ).toBundle()
-                            context.startActivity(
-                                Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS).apply {
-                                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                                },
-                                options
-                            )
-                            pollAndReturn(context) { hasBatteryOptimizationExemption(context) }
-                        }
-                    }
-                }
-            )
-        }
-        !hasNotif -> {
-            SinglePermissionDialog(
-                title = "Silence Distractions",
-                description = "Notification access allows TimeWise to hide distracting alerts while you're in a focus session.",
-                icon = Icons.Outlined.Notifications,
-                buttonText = "Enable Notification Access",
-                onClick = {
-                    // Deep link to specific app toggle if supported (Android 11+)
-                    val intent = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                        Intent(Settings.ACTION_NOTIFICATION_LISTENER_DETAIL_SETTINGS).apply {
-                            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                            val cn = ComponentName(context, TimewiseNotificationListenerService::class.java)
-                            putExtra(Settings.EXTRA_NOTIFICATION_LISTENER_COMPONENT_NAME, cn.flattenToString())
-                        }
-                    } else {
-                        Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS).apply {
-                            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                        }
-                    }
-
-                    try {
-                        context.startActivity(intent)
-                    } catch (e: Exception) {
-                        context.startActivity(
-                            Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS).apply {
-                                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                            }
-                        )
-                    }
-                    pollAndReturn(context) { isNotificationServiceEnabled(context) }
-                }
-            )
-        }
+                pollAndReturn(context) { isNotificationServiceEnabled(context) }
+            }
+        )
+        else -> null
     }
+
+    stepData?.let { SinglePermissionDialog(it) }
 }
 
+private data class PermissionStep(
+    val id: Int,
+    val title: String,
+    val description: String,
+    val icon: ImageVector,
+    val buttonText: String,
+    val onClick: () -> Unit
+)
+
 @Composable
-private fun SinglePermissionDialog(
-    title: String,
-    description: String,
-    icon: ImageVector,
-    buttonText: String,
-    onClick: () -> Unit
-) {
+private fun SinglePermissionDialog(data: PermissionStep) {
     AlertDialog(
         onDismissRequest = { /* forced */ },
         shape = RoundedCornerShape(24.dp),
         icon = {
-            Box(
-                modifier = Modifier
-                    .size(64.dp)
-                    .background(PurpleLight, CircleShape),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(icon, contentDescription = null, tint = Purple, modifier = Modifier.size(32.dp))
+            AnimatedContent(
+                targetState = data,
+                transitionSpec = { fadeIn() togetherWith fadeOut() },
+                label = "icon"
+            ) { step ->
+                Box(modifier = Modifier.fillMaxWidth()) {
+                    Text(
+                        text = "${step.id}/4",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = Color.Black,
+                        modifier = Modifier.align(Alignment.TopEnd)
+                    )
+                    Box(
+                        modifier = Modifier
+                            .size(64.dp)
+                            .background(PurpleLight, CircleShape)
+                            .align(Alignment.Center),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(step.icon, contentDescription = null, tint = Purple, modifier = Modifier.size(32.dp))
+                    }
+                }
             }
         },
         title = {
-            Text(
-                text = title,
-                style = MaterialTheme.typography.headlineSmall,
-                fontWeight = FontWeight.Bold,
-                textAlign = TextAlign.Center,
-                modifier = Modifier.fillMaxWidth()
-            )
+            AnimatedContent(targetState = data.title, label = "title") { title ->
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.headlineSmall,
+                    fontWeight = FontWeight.Bold,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
         },
         text = {
-            Text(
-                text = description,
-                style = MaterialTheme.typography.bodyMedium,
-                textAlign = TextAlign.Center,
-                modifier = Modifier.fillMaxWidth()
-            )
+            AnimatedContent(targetState = data.description, label = "desc") { desc ->
+                Text(
+                    text = desc,
+                    style = MaterialTheme.typography.bodyMedium,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
         },
         confirmButton = {
             Button(
-                onClick = onClick,
+                onClick = data.onClick,
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 8.dp),
                 colors = ButtonDefaults.buttonColors(containerColor = Purple),
                 shape = RoundedCornerShape(12.dp)
             ) {
-                Text(buttonText, fontWeight = FontWeight.Bold)
+                AnimatedContent(targetState = data.buttonText, label = "btn") { text ->
+                    Text(text, fontWeight = FontWeight.Bold)
+                }
             }
         }
     )
