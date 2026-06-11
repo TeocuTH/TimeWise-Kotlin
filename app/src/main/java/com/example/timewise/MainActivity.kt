@@ -52,8 +52,8 @@ import com.example.timewise.stats.StatsScreen
 import com.example.timewise.ui.AppSelectionScreen
 import com.example.timewise.ui.theme.TimewiseTheme
 
-private val Purple      = Color(0xFF6C63FF)
-private val PurpleLight = Color(0xFFEDECFF)
+private val Purple      = Color(0xFF8E8BBF)
+private val PurpleLight = Color(0xFFF1F1F8)
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {

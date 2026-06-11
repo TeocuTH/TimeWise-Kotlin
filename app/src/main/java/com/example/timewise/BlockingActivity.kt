@@ -230,7 +230,7 @@ fun BlockingScreen(
             modifier = Modifier
                 .fillMaxWidth()
                 .height(4.dp)
-                .background(Color(0xFF6C63FF))
+                .background(Color(0xFF8E8BBF))
                 .align(Alignment.TopCenter)
         )
 
@@ -243,7 +243,7 @@ fun BlockingScreen(
             Box(
                 modifier = Modifier
                     .size(72.dp)
-                    .background(Color(0xFF6C63FF), shape = CircleShape),
+                    .background(Color(0xFF8E8BBF), shape = CircleShape),
                 contentAlignment = Alignment.Center
             ) {
                 Image(
@@ -274,7 +274,7 @@ fun BlockingScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(4.dp),
-                color = Color(0xFF6C63FF),
+                color = Color(0xFF8E8BBF),
                 trackColor = Color(0xFFE0E0E0),
             )
 
@@ -309,7 +309,7 @@ fun BlockingScreen(
                     onClick = onResist,
                     modifier = Modifier.weight(1f),
                     colors = ButtonDefaults.buttonColors(
-                        containerColor = Color(0xFF6C63FF)
+                        containerColor = Color(0xFF8E8BBF)
                     ),
                     shape = RoundedCornerShape(12.dp)
                 ) {

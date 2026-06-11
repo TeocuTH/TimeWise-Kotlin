@@ -24,10 +24,10 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.repeatOnLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 
-private val Purple      = Color(0xFF6C63FF)
-private val PurpleLight = Color(0xFFEDECFF)
-private val TealColor   = Color(0xFF1D9E75)
-private val TealLight   = Color(0xFFE1F5EE)
+private val Purple      = Color(0xFF8E8BBF)
+private val PurpleLight = Color(0xFFF1F1F8)
+private val TealColor   = Color(0xFF6AA48A)
+private val TealLight   = Color(0xFFEDF4F1)
 
 @Composable
 fun HomeScreen(vm: HomeViewModel = viewModel()) {

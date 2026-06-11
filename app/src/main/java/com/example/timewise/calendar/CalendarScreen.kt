@@ -529,15 +529,15 @@ private fun DayTimeline(
                             .offset(y = topOff)
                             .height(bHeight)
                             .fillMaxWidth()
-                            .border(2.dp, Color(0xFF6C63FF), RoundedCornerShape(6.dp))
-                            .background(Color(0xFF6C63FF).copy(alpha = 0.1f), RoundedCornerShape(6.dp))
+                            .border(2.dp, Color(0xFF8E8BBF), RoundedCornerShape(6.dp))
+                            .background(Color(0xFF8E8BBF).copy(alpha = 0.1f), RoundedCornerShape(6.dp))
                     ) {
                         Box(
                             Modifier
                                 .size(8.dp)
                                 .align(Alignment.TopStart)
                                 .offset(x = (-2).dp, y = (-2).dp)
-                                .background(Color(0xFF6C63FF), CircleShape)
+                                .background(Color(0xFF8E8BBF), CircleShape)
                                 .border(1.dp, Color.White, CircleShape)
                         )
                         Box(
@@ -545,7 +545,7 @@ private fun DayTimeline(
                                 .size(8.dp)
                                 .align(Alignment.BottomEnd)
                                 .offset(x = 2.dp, y = 2.dp)
-                                .background(Color(0xFF6C63FF), CircleShape)
+                                .background(Color(0xFF8E8BBF), CircleShape)
                                 .border(1.dp, Color.White, CircleShape)
                         )
                     }
@@ -847,15 +847,15 @@ private fun WeekTimeline(
                                         .offset(y = topOff)
                                         .height(bHeight)
                                         .fillMaxWidth()
-                                        .border(2.dp, Color(0xFF6C63FF), RoundedCornerShape(6.dp))
-                                        .background(Color(0xFF6C63FF).copy(alpha = 0.1f), RoundedCornerShape(6.dp))
+                                        .border(2.dp, Color(0xFF8E8BBF), RoundedCornerShape(6.dp))
+                                        .background(Color(0xFF8E8BBF).copy(alpha = 0.1f), RoundedCornerShape(6.dp))
                                 ) {
                                     Box(
                                         Modifier
                                             .size(8.dp)
                                             .align(Alignment.TopStart)
                                             .offset(x = (-2).dp, y = (-2).dp)
-                                            .background(Color(0xFF6C63FF), CircleShape)
+                                            .background(Color(0xFF8E8BBF), CircleShape)
                                             .border(1.dp, Color.White, CircleShape)
                                     )
                                     Box(
@@ -863,7 +863,7 @@ private fun WeekTimeline(
                                             .size(8.dp)
                                             .align(Alignment.BottomEnd)
                                             .offset(x = 2.dp, y = 2.dp)
-                                            .background(Color(0xFF6C63FF), CircleShape)
+                                            .background(Color(0xFF8E8BBF), CircleShape)
                                             .border(1.dp, Color.White, CircleShape)
                                     )
                                 }

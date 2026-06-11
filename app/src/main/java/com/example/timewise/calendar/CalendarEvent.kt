@@ -56,16 +56,16 @@ data class CalendarEvent(
 }
 
 enum class EventColor(val label: String, val accentHex: Long, val containerHex: Long) {
-    PURPLE("Purple", 0xFF6C63FF, 0xFFEDECFF),
-    SKY("Sky", 0xFF45A2B9, 0xFFE0F7FA),
-    TEAL("Teal", 0xFF1D9E75, 0xFFE0F5EE),
-    SAGE("Sage", 0xFF85884B, 0xFFF1F2E4),
-    GOLD("Gold", 0xFFB7951B, 0xFFF9F4DF),
-    AMBER("Amber", 0xFFBA7517, 0xFFFAEEDA),
-    CORAL("Coral", 0xFFD85A30, 0xFFFAECE7),
-    ROSE("Rose", 0xFFC13B4A, 0xFFFCE8E9),
-    MAGENTA("Magenta", 0xFF8E24AA, 0xFFF3E5F5),
-    GRAY("Gray", 0xFF757575, 0xFFEEEEEE);
+    PURPLE("Purple", 0xFF8E8BBF, 0xFFF1F1F8),
+    SKY("Sky", 0xFF7DADB8, 0xFFF0F6F7),
+    TEAL("Teal", 0xFF6AA48A, 0xFFF0F5F2),
+    SAGE("Sage", 0xFF909660, 0xFFF3F4ED),
+    GOLD("Gold", 0xFFC8B46A, 0xFFF8F7EE),
+    AMBER("Amber", 0xFFC49A60, 0xFFF8F4ED),
+    CORAL("Coral", 0xFFC98070, 0xFFF8F1EF),
+    ROSE("Rose", 0xFFB87070, 0xFFF7F0F0),
+    MAGENTA("Magenta", 0xFFA06AAF, 0xFFF5F1F7),
+    GRAY("Gray", 0xFF9E9E9E, 0xFFF5F5F5);
 
     companion object {
         fun default() = PURPLE

@@ -537,7 +537,7 @@ fun AddEventSheet(
                                                     text = if (allSelected) "deselect all" else "select all",
                                                     style = MaterialTheme.typography.labelSmall,
                                                     fontWeight = FontWeight.Bold,
-                                                    color = if (allSelected) MaterialTheme.colorScheme.error else Color(0xFF6C63FF),
+                                                    color = if (allSelected) MaterialTheme.colorScheme.error else Color(0xFF8E8BBF),
                                                     modifier = Modifier.clickable {
                                                         blocked = if (allSelected) {
                                                             emptySet()

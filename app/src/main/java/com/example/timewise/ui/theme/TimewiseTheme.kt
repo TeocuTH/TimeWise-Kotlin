@@ -6,9 +6,9 @@ import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
 
-private val Purple      = Color(0xFF6C63FF)
-private val PurpleLight = Color(0xFFEDECFF)
-private val PurpleDark  = Color(0xFF4A44C6)
+private val Purple      = Color(0xFF8E8BBF)
+private val PurpleLight = Color(0xFFF1F1F8)
+private val PurpleDark  = Color(0xFF6B6899)
 
 private val LightColors = lightColorScheme(
     primary          = Purple,

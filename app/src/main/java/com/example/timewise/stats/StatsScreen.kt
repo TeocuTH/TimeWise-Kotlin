@@ -36,11 +36,11 @@ import kotlin.math.abs
 import kotlin.math.roundToInt
 
 // ── Brand colours (matching TimewiseTheme) ────────────────────────────────────
-private val Purple     = Color(0xFF6C63FF)
-private val PurpleLight= Color(0xFFEDECFF)
-private val PurpleMid  = Color(0xFFAFA9EC)
-private val Teal       = Color(0xFF1D9E75)
-private val TealLight  = Color(0xFFE1F5EE)
+private val Purple     = Color(0xFF8E8BBF)
+private val PurpleLight= Color(0xFFF1F1F8)
+private val PurpleMid  = Color(0xFFC3C0E5)
+private val Teal       = Color(0xFF6AA48A)
+private val TealLight  = Color(0xFFEDF4F1)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable

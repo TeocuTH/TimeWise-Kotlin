@@ -24,9 +24,9 @@ import androidx.compose.ui.unit.sp
 import androidx.core.graphics.drawable.toBitmap
 import androidx.lifecycle.viewmodel.compose.viewModel
 
-private val Purple      = Color(0xFF6C63FF)
-private val PurpleLight = Color(0xFFEDECFF)
-private val PurpleMid   = Color(0xFFAFA9EC)
+private val Purple      = Color(0xFF8E8BBF)
+private val PurpleLight = Color(0xFFF1F1F8)
+private val PurpleMid   = Color(0xFFC3C0E5)
 
 // Duration presets in minutes
 private val DURATION_PRESETS = listOf(5, 10, 15, 25, 30, 45, 60, 90)
