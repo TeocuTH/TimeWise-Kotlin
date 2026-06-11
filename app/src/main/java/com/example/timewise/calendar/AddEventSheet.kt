@@ -65,7 +65,11 @@ fun AddEventSheet(
         val dur = runCatching {
             val start = LocalDate.parse(initial.startDate).atTime(LocalTime.parse(initial.startTime))
             val end = LocalDate.parse(initial.endDate).atTime(LocalTime.parse(initial.endTime))
-            Duration.between(start, end).toMinutes()
+            val diff = Duration.between(start, end).toMinutes()
+            if (diff < 0) {
+                // If it's negative on the same day, it's likely a midnight crossing
+                if (initial.startDate == initial.endDate) diff + 1440 else 60L
+            } else diff
         }.getOrDefault(60L)
         mutableLongStateOf(dur)
     }
@@ -193,7 +197,7 @@ fun AddEventSheet(
                                     val et = LocalTime.parse(endTime)
                                     val startFull = LocalDate.parse(startDate).atTime(st)
                                     val endFull = LocalDate.parse(endDate).atTime(et)
-                                    durationMinutes = Duration.between(startFull, endFull).toMinutes()
+                                    durationMinutes = Duration.between(startFull, endFull).toMinutes().coerceAtLeast(0L)
                                 }
                             }
                         }
@@ -394,7 +398,7 @@ fun AddEventSheet(
                                 
                                 val startFull = startDt.atTime(st)
                                 val endFull = endDt.atTime(et)
-                                durationMinutes = Duration.between(startFull, endFull).toMinutes()
+                                durationMinutes = Duration.between(startFull, endFull).toMinutes().coerceAtLeast(0L)
                             }
                         },
                         modifier = Modifier.weight(1f),
