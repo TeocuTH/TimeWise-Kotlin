@@ -461,7 +461,7 @@ fun AddEventSheet(
                 // Blocked apps section
                 SectionLabel("Block apps during this event")
 
-                if (blocked.isEmpty()) {
+                if (blocked.isEmpty() || !isEditing) {
                     OutlinedButton(
                         onClick = { showAppPicker = !showAppPicker },
                         modifier = Modifier.fillMaxWidth(),
@@ -522,7 +522,27 @@ fun AddEventSheet(
                                 if (appSearch.isEmpty() && suggestedApps.isNotEmpty()) {
                                     item {
                                         Box(Modifier.padding(top = 4.dp, bottom = 4.dp)) {
-                                            SectionLabel("Suggested")
+                                            Row(
+                                                modifier = Modifier.fillMaxWidth(),
+                                                horizontalArrangement = Arrangement.SpaceBetween,
+                                                verticalAlignment = Alignment.CenterVertically
+                                            ) {
+                                                SectionLabel("Suggested")
+                                                val allSelected = installedApps.all { blocked.contains(it.packageName) }
+                                                Text(
+                                                    text = if (allSelected) "deselect all" else "select all",
+                                                    style = MaterialTheme.typography.labelSmall,
+                                                    fontWeight = FontWeight.Bold,
+                                                    color = if (allSelected) MaterialTheme.colorScheme.error else Color(0xFF6C63FF),
+                                                    modifier = Modifier.clickable {
+                                                        blocked = if (allSelected) {
+                                                            emptySet()
+                                                        } else {
+                                                            installedApps.map { it.packageName }.toSet()
+                                                        }
+                                                    }
+                                                )
+                                            }
                                         }
                                     }
                                     items(suggestedApps, key = { "sug_${it.packageName}" }) { app ->
