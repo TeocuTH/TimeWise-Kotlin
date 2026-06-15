@@ -248,7 +248,7 @@ fun BlockingScreen(
             ) {
                 Image(
                     painter = painterResource(id = R.mipmap.timewiseicon_foreground),
-                    contentDescription = "Timewise icon",
+                    contentDescription = "TimeWise icon",
                     modifier = Modifier.size(72.dp).scale(1.45f)
                 )
             }

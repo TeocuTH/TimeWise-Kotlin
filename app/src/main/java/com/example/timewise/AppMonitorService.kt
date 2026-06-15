@@ -214,7 +214,7 @@ class AppMonitorService : Service() {
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
         return Notification.Builder(this, channelId)
-            .setContentTitle("Timewise is active")
+            .setContentTitle("TimeWise is active")
             .setContentText("Tap to manage blocked apps")
             .setSmallIcon(android.R.drawable.ic_lock_idle_lock)
             .setContentIntent(openPi)

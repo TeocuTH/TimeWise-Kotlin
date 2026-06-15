@@ -191,7 +191,7 @@ private fun SequentialPermissionDialogs(
         !hasUsage -> PermissionStep(
             id = 1,
             title = "App Usage Permission",
-            description = "Allows Timewise to analyze your app usage locally and monitor your improvements.",
+            description = "Allows TimeWise to analyze your app usage locally and monitor your improvements.",
             icon = Icons.Outlined.QueryStats,
             buttonText = "Grant Usage Access",
             onClick = {
@@ -208,7 +208,7 @@ private fun SequentialPermissionDialogs(
         !hasOverlay -> PermissionStep(
             id = 2,
             title = "Enable Blocking Screen",
-            description = "Allows Timewise to block distracting apps by displaying its overlay on top of them.",
+            description = "Allows TimeWise to block distracting apps by displaying its overlay on top of them.",
             icon = Icons.Outlined.Layers,
             buttonText = "Allow Overlay",
             onClick = {
