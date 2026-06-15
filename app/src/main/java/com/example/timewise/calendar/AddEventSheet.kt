@@ -65,7 +65,11 @@ fun AddEventSheet(
         val dur = runCatching {
             val start = LocalDate.parse(initial.startDate).atTime(LocalTime.parse(initial.startTime))
             val end = LocalDate.parse(initial.endDate).atTime(LocalTime.parse(initial.endTime))
-            Duration.between(start, end).toMinutes()
+            val diff = Duration.between(start, end).toMinutes()
+            if (diff < 0) {
+                // If it's negative on the same day, it's likely a midnight crossing
+                if (initial.startDate == initial.endDate) diff + 1440 else 60L
+            } else diff
         }.getOrDefault(60L)
         mutableLongStateOf(dur)
     }
@@ -124,9 +128,11 @@ fun AddEventSheet(
 
     if (showDiscardConfirm) {
         AlertDialog(
-            onDismissRequest = {
-                showDiscardConfirm = false
-            },
+            onDismissRequest = { },
+            properties = DialogProperties(
+                dismissOnBackPress = false,
+                dismissOnClickOutside = false
+            ),
             title = {
                 Text("Discard changes?")
             },
@@ -191,7 +197,7 @@ fun AddEventSheet(
                                     val et = LocalTime.parse(endTime)
                                     val startFull = LocalDate.parse(startDate).atTime(st)
                                     val endFull = LocalDate.parse(endDate).atTime(et)
-                                    durationMinutes = Duration.between(startFull, endFull).toMinutes()
+                                    durationMinutes = Duration.between(startFull, endFull).toMinutes().coerceAtLeast(0L)
                                 }
                             }
                         }
@@ -392,7 +398,7 @@ fun AddEventSheet(
                                 
                                 val startFull = startDt.atTime(st)
                                 val endFull = endDt.atTime(et)
-                                durationMinutes = Duration.between(startFull, endFull).toMinutes()
+                                durationMinutes = Duration.between(startFull, endFull).toMinutes().coerceAtLeast(0L)
                             }
                         },
                         modifier = Modifier.weight(1f),
@@ -459,7 +465,7 @@ fun AddEventSheet(
                 // Blocked apps section
                 SectionLabel("Block apps during this event")
 
-                if (blocked.isEmpty()) {
+                if (blocked.isEmpty() || !isEditing) {
                     OutlinedButton(
                         onClick = { showAppPicker = !showAppPicker },
                         modifier = Modifier.fillMaxWidth(),
@@ -483,9 +489,13 @@ fun AddEventSheet(
                             onClick  = { showAppPicker = !showAppPicker },
                             modifier = Modifier.align(Alignment.Start),
                         ) {
-                            Icon(Icons.Outlined.Add, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Icon(
+                                if (showAppPicker) Icons.Outlined.Remove else Icons.Outlined.Add,
+                                contentDescription = null,
+                                modifier = Modifier.size(16.dp)
+                            )
                             Spacer(Modifier.width(4.dp))
-                            Text("Add more")
+                            Text(if (showAppPicker) "Close" else "Add more")
                         }
                     }
                 }
@@ -520,7 +530,27 @@ fun AddEventSheet(
                                 if (appSearch.isEmpty() && suggestedApps.isNotEmpty()) {
                                     item {
                                         Box(Modifier.padding(top = 4.dp, bottom = 4.dp)) {
-                                            SectionLabel("Suggested")
+                                            Row(
+                                                modifier = Modifier.fillMaxWidth(),
+                                                horizontalArrangement = Arrangement.SpaceBetween,
+                                                verticalAlignment = Alignment.CenterVertically
+                                            ) {
+                                                SectionLabel("Suggested")
+                                                val allSelected = installedApps.all { blocked.contains(it.packageName) }
+                                                Text(
+                                                    text = if (allSelected) "deselect all" else "select all",
+                                                    style = MaterialTheme.typography.labelSmall,
+                                                    fontWeight = FontWeight.Bold,
+                                                    color = if (allSelected) MaterialTheme.colorScheme.error else Color(0xFF6C63FF),
+                                                    modifier = Modifier.clickable {
+                                                        blocked = if (allSelected) {
+                                                            emptySet()
+                                                        } else {
+                                                            installedApps.map { it.packageName }.toSet()
+                                                        }
+                                                    }
+                                                )
+                                            }
                                         }
                                     }
                                     items(suggestedApps, key = { "sug_${it.packageName}" }) { app ->

@@ -50,7 +50,7 @@ fun HomeScreen(vm: HomeViewModel = viewModel()) {
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         // ── Header ────────────────────────────────────────────────────────
-        Text("Timewise", style = MaterialTheme.typography.headlineLarge,
+        Text("TimeWise", style = MaterialTheme.typography.headlineLarge,
             fontWeight = FontWeight.Bold)
         Text("Intentional phone use, one pause at a time.",
             style = MaterialTheme.typography.bodyMedium,

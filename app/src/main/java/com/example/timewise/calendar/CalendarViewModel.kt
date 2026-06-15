@@ -181,9 +181,12 @@ class CalendarViewModel(app: Application) : AndroidViewModel(app) {
             start.plusHours(1)
         }
 
+        val endDate = if (end.isBefore(start)) date.plusDays(1) else date
+
         val newEvent = newEventForDate(date).copy(
             startTime = start.format(timeFmt),
-            endTime = end.format(timeFmt)
+            endTime = end.format(timeFmt),
+            endDate = endDate.format(dateFmt)
         )
         _uiState.update { it.copy(
             showSheet = true,
@@ -194,9 +197,11 @@ class CalendarViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun updateGhostEvent(date: LocalDate, startTime: LocalTime, endTime: LocalTime) {
+        val endDate = if (endTime.isBefore(startTime)) date.plusDays(1) else date
         val ghost = newEventForDate(date).copy(
             startTime = startTime.format(timeFmt),
-            endTime = endTime.format(timeFmt)
+            endTime = endTime.format(timeFmt),
+            endDate = endDate.format(dateFmt)
         )
         _uiState.update { it.copy(editingEvent = ghost, showGhost = true) }
     }
@@ -285,14 +290,16 @@ class CalendarViewModel(app: Application) : AndroidViewModel(app) {
 
     fun newEventForDate(date: LocalDate): CalendarEvent {
         val now = LocalTime.now().withSecond(0).withNano(0)
+        val end = now.plusHours(1)
+        val endDate = if (end.isBefore(now)) date.plusDays(1) else date
         return CalendarEvent(
             id          = UUID.randomUUID().toString(),
             title       = "",
             description = "",
             startDate   = date.format(dateFmt),
-            endDate     = date.format(dateFmt),
+            endDate     = endDate.format(dateFmt),
             startTime   = now.format(timeFmt),
-            endTime     = now.plusHours(1).format(timeFmt),
+            endTime     = end.format(timeFmt),
             blockedApps = emptyList(),
             color       = EventColor.PURPLE,
         )

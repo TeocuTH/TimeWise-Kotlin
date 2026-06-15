@@ -591,6 +591,7 @@ private fun DayEventItem(
             .padding(horizontal = 2.dp, vertical = 1.dp)
             .clip(RoundedCornerShape(8.dp))
             .background(accent)
+            .border(1.dp, Color.White.copy(alpha = 0.5f), RoundedCornerShape(8.dp))
             .clickable { onTap() }
             .padding(8.dp)
     ) {

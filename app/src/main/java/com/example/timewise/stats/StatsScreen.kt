@@ -24,10 +24,13 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInParent
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.graphics.drawable.toBitmap
 import androidx.lifecycle.viewmodel.compose.viewModel
+import kotlinx.coroutines.launch
 import java.time.LocalDate
 import kotlin.math.abs
 import kotlin.math.roundToInt
@@ -44,6 +47,13 @@ private val TealLight  = Color(0xFFE1F5EE)
 fun StatsScreen(vm: StatsViewModel = viewModel()) {
     val state by vm.uiState.collectAsState()
     val context = LocalContext.current
+    val scrollState = rememberScrollState()
+    val scope = rememberCoroutineScope()
+    var outcomesOffset by remember { mutableIntStateOf(0) }
+    var outcomesHeight by remember { mutableIntStateOf(0) }
+    var topAppsOffset by remember { mutableIntStateOf(0) }
+    var topAppsHeight by remember { mutableIntStateOf(0) }
+    var viewportHeight by remember { mutableIntStateOf(0) }
 
     // Refresh data whenever the screen becomes visible
     LaunchedEffect(Unit) {
@@ -86,12 +96,23 @@ fun StatsScreen(vm: StatsViewModel = viewModel()) {
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
-                .verticalScroll(rememberScrollState())
+                .onGloballyPositioned { viewportHeight = it.size.height }
+                .verticalScroll(scrollState)
                 .padding(horizontal = 16.dp, vertical = 8.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             // ── Top metric row ────────────────────────────────────────────
-            MetricRow(state)
+            MetricRow(
+                state = state,
+                onMostUsedClick = {
+                    val target = topAppsOffset + (topAppsHeight / 2) - (viewportHeight / 2)
+                    scope.launch { scrollState.animateScrollTo(target.coerceAtLeast(0)) }
+                },
+                onBlockingClick = {
+                    val target = outcomesOffset + (outcomesHeight / 2) - (viewportHeight / 2)
+                    scope.launch { scrollState.animateScrollTo(target.coerceAtLeast(0)) }
+                }
+            )
 
             // ── Hours saved hero ──────────────────────────────────────────
             HoursSavedCard(state.minutesSaved)
@@ -100,16 +121,26 @@ fun StatsScreen(vm: StatsViewModel = viewModel()) {
             ScreenTimeCard(state.weekBars)
 
             // ── Donut + outcomes ──────────────────────────────────────────
-            OutcomesCard(
-                interceptions = state.weekInterceptions,
-                resisted      = state.weekResisted,
-            )
+            Box(Modifier.onGloballyPositioned {
+                outcomesOffset = it.positionInParent().y.toInt()
+                outcomesHeight = it.size.height
+            }) {
+                OutcomesCard(
+                    interceptions = state.weekInterceptions,
+                    resisted = state.weekResisted,
+                )
+            }
 
             // ── Top Apps Bar Chart ────────────────────────────────────────
-            TopAppsBarChartCard(
-                topApps = state.topApps,
-                hasPermission = state.hasUsagePermission
-            )
+            Box(Modifier.onGloballyPositioned {
+                topAppsOffset = it.positionInParent().y.toInt()
+                topAppsHeight = it.size.height
+            }) {
+                TopAppsBarChartCard(
+                    topApps = state.topApps,
+                    hasPermission = state.hasUsagePermission
+                )
+            }
 
             // ── AI insight ────────────────────────────────────────────────
             AiInsightCard(
@@ -125,7 +156,11 @@ fun StatsScreen(vm: StatsViewModel = viewModel()) {
 // ── Metric row ────────────────────────────────────────────────────────────────
 
 @Composable
-private fun MetricRow(state: StatsUiState) {
+private fun MetricRow(
+    state: StatsUiState,
+    onMostUsedClick: () -> Unit,
+    onBlockingClick: () -> Unit
+) {
     val resistPct = if (state.weekInterceptions > 0)
         (state.weekResisted * 100f / state.weekInterceptions).roundToInt() else 0
 
@@ -143,13 +178,13 @@ private fun MetricRow(state: StatsUiState) {
             value = if (state.hasUsagePermission && topAppIcon == null) "None" else "",
             unit = if (state.hasUsagePermission) "" else "",
             valueColor = Purple,
-            modifier = Modifier.weight(1f),
+            modifier = Modifier.weight(1f).clickable { onMostUsedClick() },
             icon = if (!state.hasUsagePermission) Icons.Outlined.Lock else null,
             appIcon = topAppIcon,
             unitColor = if (!state.hasUsagePermission) Color.White else MaterialTheme.colorScheme.onSurfaceVariant
         )
-        MetricCell("Blocked",     "${state.weekInterceptions}", "this week", MaterialTheme.colorScheme.onSurface, Modifier.weight(1f))
-        MetricCell("Resisted",    "$resistPct%",             "rate",  Teal,    Modifier.weight(1f))
+        MetricCell("Blocked",     "${state.weekInterceptions}", "this week", MaterialTheme.colorScheme.onSurface, Modifier.weight(1f).clickable { onBlockingClick() })
+        MetricCell("Resisted",    "$resistPct%",             "rate",  Teal,    Modifier.weight(1f).clickable { onBlockingClick() })
     }
 }
 
